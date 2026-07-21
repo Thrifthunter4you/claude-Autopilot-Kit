@@ -17,6 +17,9 @@ Install/refresh/remove (idempotent; backs up `~/.claude/settings.json`):
 python3 hooks/install_hooks.py [--dry-run | --remove]
 ```
 
+How the three hooks work together to keep the queue fed:
+[../docs/queueing-and-gap-finding.md](../docs/queueing-and-gap-finding.md).
+
 ## Why hooks instead of instructions
 
 Instructions live in context and die at compaction; a hook fires on EVERY
