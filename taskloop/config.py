@@ -15,6 +15,7 @@ scatters files across your machine:
     queue/superseded/    replaced/abandoned task files
     runs/                per-run JSON manifests (chunked-run state)
     logs/                drainer + worker logs
+    memory/              saved memories (the memory MCP server's default)
     mailbox.jsonl        cross-session announcements
 """
 from __future__ import annotations
