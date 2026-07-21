@@ -1,7 +1,7 @@
 # How sessions feed the queue (and find the gaps themselves)
 
-The task loop only compounds if tasks keep flowing INTO it. This kit wires four
-producers so the queue fills itself; you rarely file tasks by hand.
+The task loop only compounds if tasks keep flowing INTO it. This kit wires
+five producers so the queue fills itself; you rarely file tasks by hand.
 
 ## 1. Your prompts (the autopilot-detect hook)
 
@@ -67,6 +67,27 @@ The tag is what makes re-running the same review idempotent: a re-detected
 defect hits the tag and files nothing; a clean file files nothing; only NEW
 defects create tasks. Point it at your most load-bearing files on a timer
 (see [`systemd/`](../systemd/README.md)).
+
+## 5. Repeated operations (the crystallize nudge)
+
+The third time a session hand-assembles the same grep/awk/json pipeline,
+that operation wanted to be a script — every future re-derivation costs
+tool calls and is a fresh chance to get it subtly wrong.
+[`hooks/stop_crystallize_nudge.py`](../hooks/stop_crystallize_nudge.py)
+closes the gap at session Stop: it normalizes every Bash command in the
+transcript (numbers and quoted strings collapsed), and any *derived*
+command — a pipeline, heredoc, or long one-liner — seen ≥3 times
+(`TASKLOOP_CRYSTALLIZE_MIN`) gets a suggested intake:
+
+    task-add "Crystallize this repeated operation into a reusable script
+    (with --help): <command>" --repo <repo> --dedupe-tag "[crystallize:<hash>]"
+
+The stable hash tag means re-suggesting or re-filing is always a no-op,
+and a ledger guarantees one nudge per operation, ever. Suggest-only by
+default; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top candidate (one
+per stop). Over time this producer turns your sessions' habits into a
+toolbox: the loop writes the scripts, and later sessions call them
+instead of re-deriving.
 
 ## Triage: notes → runnable tasks
 

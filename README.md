@@ -41,8 +41,10 @@ LOOP_RESULT: {"status":"done","outcome":"rate limiting shipped, 12 tests green"}
   one fresh subagent per phase, adversarial critics instead of human
   approval, checkpoint & yield.
 - [**`hooks/`**](hooks/README.md) — prompt-time build-initiative detection,
-  stop-time "make it runnable" queue nudges, session-start state briefing.
-  Installed idempotently into `~/.claude/settings.json` by
+  stop-time "make it runnable" queue nudges, repeated-operation
+  crystallize nudges (hand-derived it 3×? the loop builds you a script),
+  session-start state briefing. Installed idempotently into
+  `~/.claude/settings.json` by
   [`hooks/install_hooks.py`](hooks/install_hooks.py).
 - [**`agents/`**](agents/AGENT_DESIGN.md) — a tiered subagent fleet
   (finder/verifier/judge/critic/dedup/tester/fixer/synth/scout/

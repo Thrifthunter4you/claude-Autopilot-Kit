@@ -33,6 +33,7 @@ KIT_HOOKS = {
     ],
     "Stop": [
         f"python3 {KIT}/hooks/stop_queue_nudge.py",
+        f"python3 {KIT}/hooks/stop_crystallize_nudge.py",
     ],
 }
 

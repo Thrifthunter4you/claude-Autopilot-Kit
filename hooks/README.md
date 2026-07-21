@@ -1,6 +1,6 @@
 # Hooks
 
-Three Claude Code hooks make the task loop ambient — you never invoke it by
+Four Claude Code hooks make the task loop ambient — you never invoke it by
 hand.
 All are fail-open (any error → silent exit 0) and never block your prompt or
 session.
@@ -10,6 +10,7 @@ session.
 | UserPromptSubmit | `userprompt_autopilot_detect.py` | classifies every prompt (clear/fuzzy/none build initiative) and injects an `<autopilot-detect>` directive telling the agent to queue clear asks via `task-go` |
 | SessionStart | `session_start_context.py` | briefs the new session: queue snapshot, next runnable task, recent mailbox messages |
 | Stop | `stop_queue_nudge.py` | nudges (never edits) when a session leaves an unrunnable note in the queue — give it a concrete goal so the loop can run it |
+| Stop | `stop_crystallize_nudge.py` | spots operations the session derived by hand ≥3× (pipelines/heredocs/long one-liners, normalized) and suggests a dedupe-tagged `task-add` so the loop builds a reusable script; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top one |
 
 Install/refresh/remove (idempotent; backs up `~/.claude/settings.json`):
 
