@@ -85,3 +85,39 @@ class TestMain:
         except SystemExit as e:
             assert e.code == 0
         assert capsys.readouterr().err == ""
+
+    def test_auto_files_real_task_add_and_dedupes(self, tmp_path, monkeypatch,
+                                                   capsys):
+        """TASKLOOP_AUTO_CRYSTALLIZE=1: main() shells out to the real
+        bin/task-add subprocess and a task file lands in a tmp
+        TASKLOOP_HOME's queue/active with the dedupe tag and status todo.
+        A second run of the same operation is a no-op (ledger)."""
+        taskloop_home = tmp_path / "taskloop_home"
+        monkeypatch.setenv("TASKLOOP_HOME", str(taskloop_home))
+        monkeypatch.setenv("TASKLOOP_AUTO_CRYSTALLIZE", "1")
+        monkeypatch.setattr(nudge, "LEDGER", tmp_path / "ledger.jsonl")
+        repo = str(tmp_path / "repo")
+
+        def _run(cmds):
+            payload = {"transcript_path": _transcript(tmp_path, cmds),
+                       "cwd": repo}
+            monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+            try:
+                nudge.main()
+            except SystemExit as e:
+                assert e.code == 0
+            return capsys.readouterr().err
+
+        err = _run([PIPELINE] * 3)
+        assert "crystallize auto-queued" in err
+
+        active_dir = taskloop_home / "queue" / "active"
+        files = list(active_dir.glob("*.md"))
+        assert len(files) == 1
+        text = files[0].read_text(encoding="utf-8")
+        assert "[crystallize:" in text
+        assert "status: todo" in text
+
+        err2 = _run([PIPELINE] * 5)
+        assert err2 == ""  # ledger: same operation never re-filed
+        assert len(list(active_dir.glob("*.md"))) == 1

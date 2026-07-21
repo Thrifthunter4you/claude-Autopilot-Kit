@@ -113,7 +113,8 @@ def count_todays_followons(active_dir, today: str) -> int:
 
 
 def make_handoff(goal, repo, klass, priority, hint, today, active_dir,
-                 not_before="", acceptance_command="", autopilot=True) -> Path:
+                 not_before="", acceptance_command="", autopilot=True,
+                 dedupe_tag="") -> Path:
     # Slugs truncate, so distinct goals can collide on filename.  Never
     # overwrite: a colliding path may hold a different goal already leased —
     # uniquify with a numeric suffix instead.
@@ -140,6 +141,8 @@ def make_handoff(goal, repo, klass, priority, hint, today, active_dir,
     }
     if acceptance_command:
         loop["acceptance_command"] = acceptance_command
+    if dedupe_tag:
+        loop["dedupe_tag"] = dedupe_tag
     h.set_loop(loop)
     h.save()
     return path
@@ -229,7 +232,8 @@ def main(argv=None) -> int:
                         today, config.ACTIVE_DIR,
                         not_before=args.not_before,
                         acceptance_command=args.acceptance_command,
-                        autopilot=(args.klass == config.AUTOPILOT_CLASS))
+                        autopilot=(args.klass == config.AUTOPILOT_CLASS),
+                        dedupe_tag=args.dedupe_tag)
     print(f"[task-add] created {path} (class={args.klass}, status=todo)")
     return 0
 
