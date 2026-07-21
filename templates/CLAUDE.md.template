@@ -1,0 +1,72 @@
+# CLAUDE.md — starter template for a repo run by the task loop
+#
+# Copy the sections you want into your repository's CLAUDE.md and edit the
+# placeholders. Every rule here exists to make unattended + interactive
+# sessions compound instead of thrash; delete what doesn't fit your project.
+
+## Project
+
+<one paragraph: what this repo is, how to run it, how to test it>
+
+- Test command: `<pytest / npm test / ...>`
+- Working branch: `<main / dev>` — commit with an explicit pathspec and a
+  clear message; never bare `git add -A`.
+
+## Mandatory workflow (research → plan → execute → verify)
+
+- **Research before editing.** Read the affected module (not just the file
+  mentioned), grep for the pattern across the repo, trace who calls it.
+  For bug fixes: identify what input produces the wrong output and what
+  OTHER inputs hit the same path.
+- **Plan before executing.** State: root cause, affected files, changes per
+  file, how you'll verify, what could regress.
+- **Verify before claiming done.** Run the tests. Check the general case,
+  not just the reported example. If any of these is true you made a
+  band-aid: you added a special case; you fixed only the reported path; you
+  only adjusted a constant.
+
+## Session discipline — CONTINUOUS
+
+- **Finishing the asked task is the midpoint, not the end.** After it
+  ships: (1) fix the issues you found along the way (same session, separate
+  commits), (2) then pull the next item from the task queue (`task-list`)
+  and keep working. Stop only when blocked on a human decision.
+- **Every discovered-but-unfixed issue leaves the session RUNNABLE, never a
+  bare note:** `task-add "<concrete goal>" --repo <this repo>`. A concrete
+  goal beats an inferred one; the stop-hook will nudge you if you forget.
+- **File follow-ons as you work** (cap ~3/session): a verified adjacent
+  improvement, a hygiene/cleanup item, or a reusable-script candidate each
+  becomes its own queue item with `--hint "[followon] ..."`. Zero follow-ons
+  is a fine outcome; only file work you verified is actually missing.
+- **Leave the tree green.** If you hit a failing test or broken build — even
+  one you didn't cause — fix it before you stop. A failure at committed HEAD
+  is yours the moment it blocks your work.
+
+## Delegation & context economy
+
+- **Broad searches go to the `scout` agent**, not your own context — you
+  want conclusions, not file dumps.
+- **Fan-out work uses the wf-* agent leaves** (finder/verifier/judge/
+  critic/dedup/tester/fixer/synth) with explicit model tiers: cheap for
+  sweeps, mid for judgment, best-model only for the final synthesis.
+- **Code is ground truth.** Memory files, docs, and old handoffs are an
+  index for finding things — verify against source before acting.
+
+## Safety boundaries (hard-stops for unattended work)
+
+Never do these without an explicit human go-ahead in a live session:
+- spend money, or make purchasing/pricing judgments
+- delete data; destructive git (force-push, reset --hard, history rewrites)
+- send anything to an external service (chat, email, tickets, deploys)
+- touch credentials, secrets, or production configuration
+
+An unattended worker that reaches one of these reports status
+`needs-human` with exactly what is needed, and stops.
+
+## Cross-session coordination
+
+- Announce claims and landings in the session mailbox
+  (`session_mailbox.py post claim|landing "..."`) so parallel sessions
+  don't collide; read recent messages before big changes.
+- Overlapping claim? Coordinate, don't clobber — and never destroy another
+  session's uncommitted work.

@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Turn a one-line goal into a `todo` task file the drainer will run.
+
+    task-add "add retry logic to the fetcher" --repo ~/dev/myproject
+
+Duplicate protection (all fail-open):
+  - exact-goal hash:   the same goal text never files twice
+  - fuzzy similarity:  a >=0.85 token-Jaccard match to an existing
+                       todo/needs-triage goal is refused (override: --force)
+  - --dedupe-tag:      producers that re-run (hooks, sweeps) pass a stable
+                       literal tag; if any queued file already carries it,
+                       nothing is filed
+  - follow-on cap:     "[followon]"-tagged discoveries soft-drop once the
+                       daily budget is spent, so a busy day can't flood the
+                       queue with side-quests
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import yaml
+
+from taskloop import config
+from taskloop.handoff import Handoff
+
+_BLANK_REPOS = {"", "none", "(none)", "null", "~"}
+_GOAL_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_DEDUP_STATUSES = {"todo", "needs-triage"}
+_DUPLICATE_SIMILARITY = 0.85
+_FOLLOWON_TAG = "[followon]"
+
+
+def goal_hash(goal: str) -> str:
+    """Stable exact-goal identity, independent of date and filename slugging."""
+    normalized = " ".join(goal.casefold().split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def slugify(text: str, maxlen: int = 48) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return s[:maxlen].rstrip("-") or "goal"
+
+
+def goal_tokens(goal: str) -> set:
+    return set(_GOAL_TOKEN_RE.findall(goal.lower()))
+
+
+def jaccard(left: set, right: set) -> float:
+    union = left | right
+    return len(left & right) / len(union) if union else 0.0
+
+
+def find_dedupe_hit(tag: str, active_dir):
+    """First queued .md already carrying the literal tag, else None."""
+    try:
+        entries = sorted(Path(active_dir).glob("*.md"))
+    except OSError:
+        return None
+    for p in entries:
+        try:
+            if tag in p.read_text(encoding="utf-8"):
+                return p
+        except (OSError, UnicodeDecodeError):
+            continue
+    return None
+
+
+def find_similar_goal(goal: str, active_dir):
+    fingerprint = goal_tokens(goal)
+    if not fingerprint:
+        return None
+    best = None
+    try:
+        entries = sorted(Path(active_dir).glob("*.md"))
+    except OSError:
+        return None
+    for path in entries:
+        try:
+            h = Handoff.load(path)
+            loop = h.loop or {}
+            if loop.get("status") not in _DEDUP_STATUSES:
+                continue
+            existing = loop.get("goal")
+            if not isinstance(existing, str):
+                continue
+            sim = jaccard(fingerprint, goal_tokens(existing))
+        except (OSError, UnicodeDecodeError, ValueError, yaml.YAMLError):
+            continue
+        if sim >= _DUPLICATE_SIMILARITY and (best is None or sim > best[1]):
+            best = (path, sim)
+    return best
+
+
+def count_todays_followons(active_dir, today: str) -> int:
+    n = 0
+    try:
+        entries = sorted(Path(active_dir).glob(f"{today}-*.md"))
+    except OSError:
+        return 0
+    for p in entries:
+        try:
+            if _FOLLOWON_TAG in p.read_text(encoding="utf-8"):
+                n += 1
+        except (OSError, UnicodeDecodeError):
+            continue
+    return n
+
+
+def make_handoff(goal, repo, klass, priority, hint, today, active_dir,
+                 not_before="", acceptance_command="", autopilot=True) -> Path:
+    # Slugs truncate, so distinct goals can collide on filename.  Never
+    # overwrite: a colliding path may hold a different goal already leased —
+    # uniquify with a numeric suffix instead.
+    base = f"{today}-{slugify(goal)}"
+    path = Path(active_dir) / f"{base}.md"
+    n = 2
+    while path.exists():
+        path = Path(active_dir) / f"{base}-{n}.md"
+        n += 1
+    h = Handoff(path=path, front={},
+                body=f"# Goal\n\n{goal}\n\nRepo: {repo}\n")
+    loop = {
+        "status": "todo",
+        "class": klass,
+        "priority": priority,
+        "goal": goal,
+        "goal_hash": goal_hash(goal),
+        "repo": repo,
+        "recall_hint": hint or goal,
+        "lease": "",
+        "strikes": 0,
+        "autopilot": autopilot,
+        "not_before": not_before or "",
+    }
+    if acceptance_command:
+        loop["acceptance_command"] = acceptance_command
+    h.set_loop(loop)
+    h.save()
+    return path
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description="Queue a goal for the task loop.")
+    ap.add_argument("goal")
+    ap.add_argument("--repo", default=config.DEFAULT_REPO,
+                    help="repository the worker runs in (required unless "
+                         "default_repo is set in config.yaml)")
+    ap.add_argument("--class", dest="klass", default=config.AUTOPILOT_CLASS)
+    ap.add_argument("--priority", type=int, default=1)
+    ap.add_argument("--hint", default="",
+                    help="what context the worker should recall first")
+    ap.add_argument("--not-before", dest="not_before", default="",
+                    help="ISO-8601 timestamp; the task is ineligible until "
+                         "then (malformed values fail open to 'no gate')")
+    ap.add_argument("--acceptance-command", default="",
+                    help="optional shell command run in --repo before a "
+                         "worker's done verdict is accepted; only exit 0 "
+                         "marks the task done")
+    ap.add_argument("--dedupe-tag", dest="dedupe_tag", default="",
+                    help="stable literal tag; if any queued .md already "
+                         "carries it, print that path and exit 0 unfiled")
+    ap.add_argument("--force", action="store_true",
+                    help="file despite a highly similar queued goal")
+    args = ap.parse_args(argv)
+
+    repo = str(args.repo or "").strip()
+    if repo.lower() in _BLANK_REPOS:
+        print("refusing blank --repo (set default_repo in config.yaml or "
+              "pass --repo)", file=sys.stderr)
+        return 2
+    if args.klass in config.GATED_CLASSES:
+        print(f"refusing gated class '{args.klass}' (never auto-runs)",
+              file=sys.stderr)
+        return 2
+
+    config.ensure_dirs()
+    today = _dt.date.today().isoformat()
+
+    # Follow-on lane cap: discovery intakes soft-drop (exit 0 — never a
+    # worker failure) once today's budget is spent.
+    if _FOLLOWON_TAG in args.hint or _FOLLOWON_TAG in args.goal:
+        n = count_todays_followons(config.ACTIVE_DIR, today)
+        if n >= config.FOLLOWON_DAILY_CAP:
+            print(f"[task-add] follow-on daily cap reached "
+                  f"({n}/{config.FOLLOWON_DAILY_CAP}); not filing (soft-drop)")
+            return 0
+
+    if args.dedupe_tag:
+        hit = find_dedupe_hit(args.dedupe_tag, config.ACTIVE_DIR)
+        if hit is not None:
+            print(f"[task-add] dedupe-tag hit: {hit} (not filing)")
+            return 0
+
+    # Exact duplicates are common producer retries.  The hash is embedded in
+    # every new task file and searched as a fixed literal before the more
+    # expensive fuzzy scan.
+    exact = goal_hash(args.goal)
+    if not args.force:
+        for candidate in Path(config.ACTIVE_DIR).glob("*.md"):
+            try:
+                if f"goal_hash: {exact}" in candidate.read_text(encoding="utf-8"):
+                    print(f"[task-add] goal-hash hit: {candidate} (not filing)")
+                    return 0
+            except (OSError, UnicodeDecodeError):
+                continue
+
+    similar = find_similar_goal(args.goal, config.ACTIVE_DIR)
+    if similar is not None:
+        hit, sim = similar
+        print(f"[task-add] similar goal: {hit} (Jaccard={sim:.2f})")
+        if not args.force:
+            print("[task-add] refusing duplicate-suspect; rerun with "
+                  "--force to file")
+            return 2
+        args.goal = f"{args.goal} [dup-suspect of {hit.stem}]"
+
+    path = make_handoff(args.goal, repo, args.klass, args.priority, args.hint,
+                        today, config.ACTIVE_DIR,
+                        not_before=args.not_before,
+                        acceptance_command=args.acceptance_command,
+                        autopilot=(args.klass == config.AUTOPILOT_CLASS))
+    print(f"[task-add] created {path} (class={args.klass}, status=todo)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

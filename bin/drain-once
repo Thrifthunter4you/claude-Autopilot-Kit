@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run one drainer activation in the foreground (for cron/systemd, use the
+# provided units in systemd/).  Niced so unattended work never competes with
+# your interactive apps.
+set -euo pipefail
+KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATE_HOME="${TASKLOOP_HOME:-$HOME/.taskloop}"
+mkdir -p "$STATE_HOME/logs"
+renice -n 19 -p $$ >/dev/null 2>&1 || true
+ionice -c3 -p $$ >/dev/null 2>&1 || true
+export PYTHONPATH="$KIT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m taskloop.drainer >> "$STATE_HOME/logs/drain.log" 2>&1

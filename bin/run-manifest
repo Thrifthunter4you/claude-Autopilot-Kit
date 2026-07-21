@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Run-manifest CLI — how autopilot workers read/write chunked-run state
+without importing anything.
+
+    run-manifest get <run_id>                          # full JSON (exit 1 if absent)
+    run-manifest next-phase <run_id> --profile small   # first unfinished phase
+    run-manifest mark-phase <run_id> <phase> <status> [--artifact P] [--summary S]
+    run-manifest set-profile <run_id> <trivial|small|large>
+    run-manifest set-tasks <run_id> 1 2 3              # seed execute tasks (idempotent)
+    run-manifest next-task <run_id>                    # next pending task id
+    run-manifest mark-task <run_id> <task_id> <status>
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from taskloop import config, manifest
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("get")
+    p.add_argument("run_id")
+
+    p = sub.add_parser("next-phase")
+    p.add_argument("run_id")
+    p.add_argument("--profile", default=None,
+                   help="trivial|small|large (defaults to the recorded one)")
+
+    p = sub.add_parser("mark-phase")
+    p.add_argument("run_id")
+    p.add_argument("phase")
+    p.add_argument("status")
+    p.add_argument("--artifact", default="")
+    p.add_argument("--summary", default="")
+
+    p = sub.add_parser("set-profile")
+    p.add_argument("run_id")
+    p.add_argument("profile", choices=sorted(config.PROFILE_PHASES))
+
+    p = sub.add_parser("set-tasks")
+    p.add_argument("run_id")
+    p.add_argument("task_ids", nargs="+")
+
+    p = sub.add_parser("next-task")
+    p.add_argument("run_id")
+
+    p = sub.add_parser("mark-task")
+    p.add_argument("run_id")
+    p.add_argument("task_id")
+    p.add_argument("status")
+
+    args = ap.parse_args(argv)
+    data = manifest.load(args.run_id)
+
+    if args.cmd == "get":
+        if not manifest.path_for(args.run_id).exists():
+            print(f"no manifest for '{args.run_id}'", file=sys.stderr)
+            return 1
+        print(json.dumps(data, indent=2))
+        return 0
+    if args.cmd == "next-phase":
+        profile = args.profile or data.get("profile") or "small"
+        phases = config.PROFILE_PHASES.get(profile,
+                                           config.PROFILE_PHASES["small"])
+        nxt = manifest.next_pending(data, phases)
+        print(nxt or "")
+        return 0
+    if args.cmd == "mark-phase":
+        manifest.mark_phase(data, args.phase, status=args.status,
+                            artifact=args.artifact, summary=args.summary)
+        manifest.save(data)
+        print(f"{args.run_id}: {args.phase} -> {args.status}")
+        return 0
+    if args.cmd == "set-profile":
+        data["profile"] = args.profile
+        manifest.save(data)
+        print(f"{args.run_id}: profile={args.profile}")
+        return 0
+    if args.cmd == "set-tasks":
+        manifest.set_tasks(data, args.task_ids)
+        manifest.save(data)
+        print(f"{args.run_id}: tasks={data['task_order']}")
+        return 0
+    if args.cmd == "next-task":
+        print(manifest.next_pending_task(data) or "")
+        return 0
+    if args.cmd == "mark-task":
+        manifest.mark_task(data, args.task_id, args.status)
+        manifest.save(data)
+        print(f"{args.run_id}: task {args.task_id} -> {args.status}")
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

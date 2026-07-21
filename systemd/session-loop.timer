@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the claude-workflow-kit drainer periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=10min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

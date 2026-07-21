@@ -1,0 +1,97 @@
+# How sessions feed the queue (and find the gaps themselves)
+
+The loop only compounds if tasks keep flowing INTO it. This kit wires four
+producers so the queue fills itself; you rarely file tasks by hand.
+
+## 1. Your prompts (the autopilot-detect hook)
+
+`hooks/userprompt_autopilot_detect.py` fires on EVERY prompt and classifies
+it:
+
+- **clear** build initiative ("build X", "add Y to Z") → the agent
+  auto-runs `task-go "<goal>" --repo <repo>` and relays progress — you never
+  hand-run intake.
+- **fuzzy** ("maybe we should…", "what if…") → the agent asks ONE question:
+  hand to the loop, or discuss inline?
+- **none** (questions, acks, continuations) → nothing injected.
+
+Detection lives in a hook — not in instructions — because a hook fires on
+every prompt and survives context compaction. The classifier is
+conservative regex, fail-open, and has a recursion guard so background
+workers can't queue themselves.
+
+## 2. The sessions themselves (follow-ons)
+
+Both worker prompt templates carry a FOLLOW-ONS step: when a task surfaces
+genuinely valuable adjacent work — an improvement, a cleanup, a
+reusable-script candidate — the worker files each as its own queue item
+BEFORE finishing:
+
+    task-add "<concrete goal>" --repo <repo> --priority 4 \
+      --hint "[followon] from <current task>"
+
+Guardrails that keep this from flooding the queue:
+- **cap ~3 per task**, and "zero is a fine outcome" is stated in the prompt
+- **daily fleet-wide cap** on `[followon]` intakes (soft-drop past it)
+- **dedup**: exact goal-hash, then fuzzy Jaccard ≥0.85 against queued goals
+- a failed `task-add` is NEVER a task failure — the worker moves on
+
+The same pattern applies to your interactive sessions: the CLAUDE.md
+template's session-discipline section tells the agent that finishing the
+asked task is the midpoint — fix what it found, file what it can't fix, then
+pull the next queue item.
+
+## 3. Session stop (the queue nudge)
+
+`hooks/stop_queue_nudge.py` runs when a session ends. Any recently-touched
+file in `queue/active/` that is NOT runnable (no `loop:` status) gets a
+nudge printed to the author: give it a concrete goal now, or it sits as a
+note nobody runs. Suggest-only — the hook never edits files — and
+idempotent via a ledger so you're nudged once per file, not every session.
+
+This closes the classic failure mode: sessions ending with "found X but
+didn't fix it" notes that nothing ever executes. A RUNNABLE task with an
+exact goal starts within minutes; a parked note waits for triage to infer
+one.
+
+## 4. Scheduled sweeps (maintenance mode)
+
+`templates/maintenance_prompt.txt` runs a file-only review against a target
+file: find CONFIRMED defects (real bugs, dead references, config drift —
+not style), and file each as a fix task with a **stable dedupe tag**:
+
+    --dedupe-tag "[maintenance:<file>:<line>]"
+
+The tag is what makes re-running the same review idempotent: a re-detected
+defect hits the tag and files nothing; a clean file files nothing; only NEW
+defects create tasks. Point it at your most load-bearing files on a timer
+(see `systemd/`).
+
+## Triage: notes → runnable tasks
+
+Anything that lands in the queue without a runnable `loop:` block (or gets
+parked `needs-human`) is triage material. The `triage-judge` agent judges
+ONE parked item at a time and returns:
+
+- **promote** — extracted one-line goal + repo + the `loop:` block to write
+- **park** — the ONE specific question a human must answer first
+- **likely-done** — evidence (commit/file/test) the work already happened
+
+Run it ad hoc over parked items, or wire it on a timer. Its key discipline:
+verify the note's claims against the real repo before judging — parked
+notes go stale, and promoting already-done work wastes a worker run.
+
+## Dedup, in depth
+
+Producers retry; hooks re-fire; sweeps re-run. Every intake path goes
+through three filters (in `bin/task-add`):
+
+1. **goal_hash** — sha256 of the casefolded goal, embedded in every task
+   file and searched as a literal. Exact retries never double-file.
+2. **token Jaccard ≥0.85** vs queued todo/needs-triage goals — near
+   duplicates refused (override with `--force`, which marks the new task as
+   a dup-suspect for triage).
+3. **--dedupe-tag** — the producer-side stable key for anything that
+   re-runs mechanically.
+
+All three fail open: an unreadable queue file never blocks an intake.

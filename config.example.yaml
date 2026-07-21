@@ -1,0 +1,31 @@
+# claude-workflow-kit configuration
+# Copy to ~/.taskloop/config.yaml (or $TASKLOOP_HOME/config.yaml).
+# Every key can also be set via env: TASKLOOP_<KEY> (lists comma-separated).
+
+# The repository tasks run against when intake doesn't specify one. REQUIRED
+# for hands-off use — there is deliberately no built-in default.
+default_repo: ""
+
+# Model for `claude -p` workers.
+worker_model: sonnet
+
+# Extra CLI args for every worker spawn. acceptEdits grants edit-level
+# autonomy; unattended queues you fully trust can use
+# ["--dangerously-skip-permissions"] instead (understand the risk first).
+claude_args: ["--permission-mode", "acceptEdits"]
+
+# Parallel workers per drainer activation. RAM (not API) is usually the
+# binding constraint — each worker can fan out subagent processes.
+max_concurrency: 1
+spawn_stagger_s: 8
+
+# Seconds before a worker is presumed hung and its process abandoned.
+worker_timeout_s: 21600
+
+# Queue semantics.
+default_class: safe
+gated_classes: ["destructive"]   # never auto-run
+default_priority: 3              # 0 = most urgent
+max_strikes: 3                   # crashes before a task parks needs-human
+stale_lease_s: 21600             # reap claims older than this
+followon_daily_cap: 6            # "[followon]" intakes soft-drop past this

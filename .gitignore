@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+
+# Local state never belongs in the repo — it lives in ~/.taskloop
+*.log
+*.tmp
+*.bak-*
+
+# Env / secrets (defense in depth; the kit itself needs none)
+.env
+*.pem
+*.key
+credentials*.json
+cookies*.json

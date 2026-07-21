@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""List the queue: what's runnable, what's parked, and why.
+
+    task-list            # summary + runnable tasks
+    task-list --all      # every managed task, grouped by status
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from taskloop import config, queue
+from taskloop.handoff import Handoff
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true",
+                    help="show every managed task, grouped by status")
+    args = ap.parse_args(argv)
+
+    config.ensure_dirs()
+    snap = queue.snapshot()
+    print(f"queue: {snap['eligible']} runnable / {snap['total_todo']} todo "
+          f"({snap['lease_held']} leased, {snap['not_before_pending']} "
+          f"time-gated, {snap['strikes_exhausted']} struck-out, "
+          f"{snap['parked']} parked)\n")
+
+    groups: dict = {}
+    for p in sorted(Path(config.ACTIVE_DIR).glob("*.md")):
+        try:
+            h = Handoff.load(p)
+        except Exception:
+            continue
+        lp = h.loop
+        if not lp:
+            continue
+        status = str(lp.get("status") or "?")
+        if not args.all and status != "todo":
+            continue
+        groups.setdefault(status, []).append(
+            (int(lp.get("priority", config.DEFAULT_PRIORITY)), p.name,
+             str(lp.get("goal") or "")[:100]))
+
+    for status in sorted(groups):
+        print(f"[{status}]")
+        for prio, name, goal in sorted(groups[status]):
+            print(f"  p{prio} {name}")
+            if goal:
+                print(f"      {goal}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

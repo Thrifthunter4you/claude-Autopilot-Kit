@@ -1,0 +1,9 @@
+[Unit]
+Description=claude-workflow-kit drainer (one activation; timer-driven)
+
+[Service]
+Type=oneshot
+# Adjust the kit path if you cloned elsewhere.
+ExecStart=%h/claude-workflow-kit/bin/drain-once
+Nice=19
+IOSchedulingClass=idle

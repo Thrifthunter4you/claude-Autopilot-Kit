@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# task-go "<goal>" [--repo PATH] [--priority N] [--hint TEXT]
+#
+# One call: queue a goal AND immediately kick the drainer in the background —
+# so neither you nor the session ever hand-runs intake + drain separately.
+# This is what the autopilot-detect hook tells the agent to run when it spots
+# a clear build initiative in your prompt.
+#
+# The drainer chains a FRESH `claude -p` worker per unit (research -> design
+# -> plan -> execute-each-task -> finish), carrying state on the on-disk run
+# manifest with no human handoff.  The single-flight lock makes this kick
+# safe even if a scheduled drain fires concurrently (one side just gets
+# "busy").
+set -euo pipefail
+
+KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STATE_HOME="${TASKLOOP_HOME:-$HOME/.taskloop}"
+LOG="$STATE_HOME/logs/drain.log"
+
+if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
+  echo "usage: task-go \"<goal>\" [--repo PATH] [--priority N] [--hint TEXT]" >&2
+  exit 2
+fi
+
+mkdir -p "$STATE_HOME/logs"
+
+OUT="$("$KIT_DIR/bin/task-add" "$@")"
+echo "$OUT"
+
+# created <path> (class=...) -> pull the task path, derive run_id
+HO="$(printf '%s\n' "$OUT" | sed -n 's/.*created \(.*\) (class.*/\1/p')"
+if [ -z "$HO" ]; then
+  # Dedup refused or soft-dropped the goal — nothing to kick.
+  exit 0
+fi
+RID="$(basename "$HO" .md)"
+
+# Kick the drain in the background (detached; survives this shell).
+export PYTHONPATH="$KIT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+nohup python3 -m taskloop.drainer >>"$LOG" 2>&1 &
+KICK_PID=$!
+
+echo "task-go: queued + kicked."
+echo "run_id=$RID"
+echo "task_file=$HO"
+echo "manifest=$STATE_HOME/runs/$RID.json"
+echo "drain_log=$LOG  (kick pid $KICK_PID)"
+echo "watch: tail -f \"$LOG\"   |   phases: python3 -m json.tool \"$STATE_HOME/runs/$RID.json\""
