@@ -1,8 +1,7 @@
 # Advanced patterns
 
-Optional shapes to grow into once the basic loop is running. Each pattern
-here ran in production in the system this kit was extracted from; none is
-required.
+Optional shapes to grow into once the basic task loop is running. None is
+required — adopt a pattern when you hit the failure mode it fixes.
 
 ## Swarm mode: pre-planned batch draining
 
@@ -43,7 +42,8 @@ can't talk its way past a red test.
 ## Maintenance census on a timer
 
 Keep a list of your most load-bearing files. On a schedule, run a worker
-with `templates/maintenance_prompt.txt` against each — confirmed defects
+with [`templates/maintenance_prompt.txt`](../templates/maintenance_prompt.txt)
+against each — confirmed defects
 become fix tasks with stable `[maintenance:<file>:<line>]` dedupe tags, so
 the sweep is idempotent. Clean file → zero tasks; new defect → exactly one.
 
@@ -81,5 +81,6 @@ concurrency to 1 while the machine is interactively in use.
 When multiple interactive sessions + the drainer share repos, add a lease
 file per repo ("tree lease") that sessions acquire before large landings,
 and have a PreToolUse hook warn when a command targets a repo another
-session holds. The mailbox (`state/session_mailbox.py`) covers the
+session holds. The mailbox
+([`state/session_mailbox.py`](../state/session_mailbox.py)) covers the
 announce/coordinate half; leases add enforcement if you need it.

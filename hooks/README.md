@@ -1,6 +1,7 @@
 # Hooks
 
-Three Claude Code hooks make the loop ambient — you never invoke it by hand.
+Three Claude Code hooks make the task loop ambient — you never invoke it by
+hand.
 All are fail-open (any error → silent exit 0) and never block your prompt or
 session.
 

@@ -6,7 +6,8 @@ files, no embedder/database).
 ## memory — persistent file-based memory
 
 ```bash
-claude mcp add memory -- python3 <kit>/mcp/memory_mcp.py
+# from the kit root:
+claude mcp add memory -- python3 "$PWD/mcp/memory_mcp.py"
 ```
 
 | Tool | What it does |
@@ -18,13 +19,15 @@ claude mcp add memory -- python3 <kit>/mcp/memory_mcp.py
 
 Memory tree defaults to `~/.taskloop/memory/` (override: `MEMORY_DIR`).
 Files are plain markdown with frontmatter — hand-edit freely; the index is
-rebuilt on every save. Conventions: `../memory/MEMORY_MODEL.md`.
+rebuilt on every save. Conventions:
+[`../memory/MEMORY_MODEL.md`](../memory/MEMORY_MODEL.md).
 
 ## context — budget-bounded context packs
 
 ```bash
+# from the kit root:
 claude mcp add context -e CONTEXT_REPO=/path/to/your/repo \
-  -- python3 <kit>/mcp/context_mcp.py
+  -- python3 "$PWD/mcp/context_mcp.py"
 ```
 
 | Tool | What it does |
@@ -39,9 +42,11 @@ source: agents must Read the citations for exact values.
 
 ## State awareness (not an MCP — hooks + a mailbox)
 
-- `../hooks/session_start_context.py` briefs each new session: queue
-  snapshot, next runnable task, recent mailbox messages.
-- `../state/session_mailbox.py` is the cross-session channel: post `claim`
+- [`../hooks/session_start_context.py`](../hooks/session_start_context.py)
+  briefs each new session: queue snapshot, next runnable task, recent
+  mailbox messages.
+- [`../state/session_mailbox.py`](../state/session_mailbox.py) is the
+  cross-session channel: post `claim`
   before multi-file changes in a shared repo, `landing` after you ship;
   sessions read it at start (and you can add a PreToolUse hook to surface
   new messages mid-session).

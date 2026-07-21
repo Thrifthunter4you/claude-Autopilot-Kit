@@ -1,12 +1,12 @@
 # How sessions feed the queue (and find the gaps themselves)
 
-The loop only compounds if tasks keep flowing INTO it. This kit wires four
+The task loop only compounds if tasks keep flowing INTO it. This kit wires four
 producers so the queue fills itself; you rarely file tasks by hand.
 
 ## 1. Your prompts (the autopilot-detect hook)
 
-`hooks/userprompt_autopilot_detect.py` fires on EVERY prompt and classifies
-it:
+[`hooks/userprompt_autopilot_detect.py`](../hooks/userprompt_autopilot_detect.py)
+fires on EVERY prompt and classifies it:
 
 - **clear** build initiative ("build X", "add Y to Z") → the agent
   auto-runs `task-go "<goal>" --repo <repo>` and relays progress — you never
@@ -43,7 +43,8 @@ pull the next queue item.
 
 ## 3. Session stop (the queue nudge)
 
-`hooks/stop_queue_nudge.py` runs when a session ends. Any recently-touched
+[`hooks/stop_queue_nudge.py`](../hooks/stop_queue_nudge.py) runs when a
+session ends. Any recently-touched
 file in `queue/active/` that is NOT runnable (no `loop:` status) gets a
 nudge printed to the author: give it a concrete goal now, or it sits as a
 note nobody runs. Suggest-only — the hook never edits files — and
@@ -56,8 +57,8 @@ one.
 
 ## 4. Scheduled sweeps (maintenance mode)
 
-`templates/maintenance_prompt.txt` runs a file-only review against a target
-file: find CONFIRMED defects (real bugs, dead references, config drift —
+[`templates/maintenance_prompt.txt`](../templates/maintenance_prompt.txt)
+runs a file-only review against a target file: find CONFIRMED defects (real bugs, dead references, config drift —
 not style), and file each as a fix task with a **stable dedupe tag**:
 
     --dedupe-tag "[maintenance:<file>:<line>]"
@@ -65,13 +66,14 @@ not style), and file each as a fix task with a **stable dedupe tag**:
 The tag is what makes re-running the same review idempotent: a re-detected
 defect hits the tag and files nothing; a clean file files nothing; only NEW
 defects create tasks. Point it at your most load-bearing files on a timer
-(see `systemd/`).
+(see [`systemd/`](../systemd/README.md)).
 
 ## Triage: notes → runnable tasks
 
 Anything that lands in the queue without a runnable `loop:` block (or gets
-parked `needs-human`) is triage material. The `triage-judge` agent judges
-ONE parked item at a time and returns:
+parked `needs-human`) is triage material. The
+[`triage-judge`](../agents/triage-judge.md) agent judges ONE parked item at
+a time and returns:
 
 - **promote** — extracted one-line goal + repo + the `loop:` block to write
 - **park** — the ONE specific question a human must answer first
@@ -84,7 +86,7 @@ notes go stale, and promoting already-done work wastes a worker run.
 ## Dedup, in depth
 
 Producers retry; hooks re-fire; sweeps re-run. Every intake path goes
-through three filters (in `bin/task-add`):
+through three filters (in [`bin/task-add`](../bin/task-add)):
 
 1. **goal_hash** — sha256 of the casefolded goal, embedded in every task
    file and searched as a literal. Exact retries never double-file.

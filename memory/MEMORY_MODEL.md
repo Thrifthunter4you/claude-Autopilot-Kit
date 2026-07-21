@@ -46,7 +46,7 @@ after 30 days) — the queue directories should stay small enough to scan.
 
 ## Using the memory MCP
 
-`mcp/memory_mcp.py` exposes the same tree as tools
+[`../mcp/memory_mcp.py`](../mcp/memory_mcp.py) exposes the same tree as tools
 (`memory_save/search/read/list`), so agents can save and recall memories
 without knowing the file layout. The files stay plain markdown — hand-edit
 them freely; the server rebuilds the index on every save.

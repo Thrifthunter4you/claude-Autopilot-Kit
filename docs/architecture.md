@@ -33,17 +33,17 @@
 | Piece | File(s) | Job |
 |---|---|---|
 | Task files | `queue/active/*.md` | one markdown file per task; the `loop:` frontmatter block is the whole queue contract |
-| Intake | `bin/task-add` | goal → task file; exact-hash + fuzzy dedup, dedupe-tags, follow-on cap |
-| Queue | `taskloop/queue.py` | eligibility (status/class/lease/strikes/not_before) + selection (priority, then aging) |
-| Drainer | `taskloop/drainer.py` | single-flight loop: claim → spawn worker → apply verdict |
-| Worker | `taskloop/worker.py` | render prompt template → `claude -p` → parse `LOOP_RESULT` |
-| Manifest | `taskloop/manifest.py`, `bin/run-manifest` | chunked-run state: phases, execute tasks, profile |
-| Autopilot skill | `skills/autopilot/SKILL.md` | the conductor protocol each worker follows |
-| Hooks | `hooks/*.py` | prompt-time detection, stop-time queue nudges, session-start state |
-| Agents | `agents/*.md` | tiered subagent fleet the conductor dispatches |
-| Memory MCP | `mcp/memory_mcp.py` | persistent file-based memory (save/search/read/list) |
-| Context MCP | `mcp/context_mcp.py` | budget-bounded context packs (memory + grep + git legs) |
-| Mailbox | `state/session_mailbox.py` | cross-session claims/landings |
+| Intake | [`bin/task-add`](../bin/task-add) | goal → task file; exact-hash + fuzzy dedup, dedupe-tags, follow-on cap |
+| Queue | [`taskloop/queue.py`](../taskloop/queue.py) | eligibility (status/class/lease/strikes/not_before) + selection (priority, then aging) |
+| Drainer | [`taskloop/drainer.py`](../taskloop/drainer.py) | single-flight loop: claim → spawn worker → apply verdict |
+| Worker | [`taskloop/worker.py`](../taskloop/worker.py) | render prompt template → `claude -p` → parse `LOOP_RESULT` |
+| Manifest | [`taskloop/manifest.py`](../taskloop/manifest.py), [`bin/run-manifest`](../bin/run-manifest) | chunked-run state: phases, execute tasks, profile |
+| Autopilot skill | [`skills/autopilot/SKILL.md`](../skills/autopilot/SKILL.md) | the conductor protocol each worker follows |
+| Hooks | [`hooks/*.py`](../hooks/README.md) | prompt-time detection, stop-time queue nudges, session-start state |
+| Agents | [`agents/*.md`](../agents/AGENT_DESIGN.md) | tiered subagent fleet the conductor dispatches |
+| Memory MCP | [`mcp/memory_mcp.py`](../mcp/memory_mcp.py) | persistent file-based memory (save/search/read/list) |
+| Context MCP | [`mcp/context_mcp.py`](../mcp/context_mcp.py) | budget-bounded context packs (memory + grep + git legs) |
+| Mailbox | [`state/session_mailbox.py`](../state/session_mailbox.py) | cross-session claims/landings |
 
 ## Why chunked workers (the core design decision)
 

@@ -1,15 +1,14 @@
 # Agent design guide
 
 How the agents in this kit are structured, and how to design your own.
-These are the conventions that emerged from running a large fleet of
-specialized agents in production; each one earns its place by fixing a real
-failure mode.
+Every convention here earns its place by fixing a real failure mode that
+shows up once many specialized agents run unattended.
 
 ## The anatomy of an agent definition
 
 Every agent is a markdown file in `~/.claude/agents/` (or your project's
 `.claude/agents/`) with YAML frontmatter + a system prompt
-(see `agent_def_template.md`):
+(see [`agent_def_template.md`](agent_def_template.md)):
 
 ```
 ---
