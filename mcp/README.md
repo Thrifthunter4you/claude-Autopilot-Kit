@@ -1,7 +1,8 @@
 # MCP servers
 
 Two stdio MCP servers, both dependency-light (`pip install mcp`, plain
-files, no embedder/database).
+files, no embedder/database). Register them with the commands below, then
+confirm with `claude mcp list`.
 
 ## memory — persistent file-based memory
 
