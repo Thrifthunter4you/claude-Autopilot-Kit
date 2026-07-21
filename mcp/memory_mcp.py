@@ -147,8 +147,8 @@ def memory_read(name: str) -> str:
 @mcp.tool()
 def memory_list() -> str:
     """The memory index: every memory's name + one-line description."""
-    if not INDEX.exists():
-        _rebuild_index() if ROOT.exists() else None
+    if not INDEX.exists() and ROOT.exists():
+        _rebuild_index()
     if not INDEX.exists():
         return "(no memories yet)"
     return INDEX.read_text(encoding="utf-8")
