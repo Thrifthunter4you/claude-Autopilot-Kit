@@ -14,12 +14,14 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parents[1]
-SETTINGS = Path.home() / ".claude" / "settings.json"
+SETTINGS = Path(os.environ.get("CLAUDE_DIR",
+                               Path.home() / ".claude")) / "settings.json"
 
 # event -> list of hook commands (order preserved on install)
 KIT_HOOKS = {

@@ -6,7 +6,7 @@ set -euo pipefail
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_HOME="${TASKLOOP_HOME:-$HOME/.taskloop}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
-CLAUDE_DIR="$HOME/.claude"
+CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 
 echo "== claude-workflow-kit install =="
 echo "kit:        $KIT"
@@ -25,16 +25,29 @@ echo "symlinked bins into $BIN_DIR (ensure it is on PATH)"
 # 3. Hooks (idempotent; backs up settings.json first)
 python3 "$KIT/hooks/install_hooks.py"
 
-# 4. Agents + skill (symlink so git pull updates them)
+# 4. Agents + skill (symlink so git pull updates them).
+# Non-clobber: an existing REAL file/dir with the same name is yours — the
+# installer warns and skips it; only absent paths and prior symlinks are
+# (re)linked.
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/skills"
 for a in "$KIT"/agents/*.md; do
   base="$(basename "$a")"
   case "$base" in
     AGENT_DESIGN.md|agent_def_template.md) continue ;;
   esac
-  ln -sf "$a" "$CLAUDE_DIR/agents/$base"
+  dest="$CLAUDE_DIR/agents/$base"
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    echo "SKIP $dest (exists and is not a symlink — yours to keep)"
+  else
+    ln -sf "$a" "$dest"
+  fi
 done
-ln -sfn "$KIT/skills/autopilot" "$CLAUDE_DIR/skills/autopilot"
+skill_dest="$CLAUDE_DIR/skills/autopilot"
+if [ -e "$skill_dest" ] && [ ! -L "$skill_dest" ]; then
+  echo "SKIP $skill_dest (exists and is not a symlink — yours to keep)"
+else
+  ln -sfn "$KIT/skills/autopilot" "$skill_dest"
+fi
 echo "linked agents + autopilot skill into $CLAUDE_DIR"
 
 # 5. Config starter
