@@ -17,6 +17,18 @@ KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_HOME="${TASKLOOP_HOME:-$HOME/.taskloop}"
 LOG="$STATE_HOME/logs/drain.log"
 
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  cat <<'EOF'
+usage: task-go "<goal>" [task-add options]
+
+Queue a goal AND kick the drainer in the background — one command from
+idea to running worker. Everything after the goal passes through to
+task-add (--repo PATH, --priority N, --hint TEXT, --class NAME, ...);
+see `task-add --help` for the full list.
+EOF
+  exit 0
+fi
+
 if [ $# -lt 1 ] || [ -z "${1:-}" ]; then
   echo "usage: task-go \"<goal>\" [--repo PATH] [--priority N] [--hint TEXT]" >&2
   exit 2

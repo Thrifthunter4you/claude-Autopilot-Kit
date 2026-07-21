@@ -3,6 +3,20 @@
 # provided units in systemd/).  Niced so unattended work never competes with
 # your interactive apps.
 set -euo pipefail
+
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+usage: drain-once
+
+Run one drainer activation in the foreground: claim eligible tasks, spawn
+workers, apply verdicts, exit. Single-flight — a concurrent activation
+just logs "busy". Output goes to $TASKLOOP_HOME/logs/drain.log
+(default ~/.taskloop/logs/drain.log).
+EOF
+    exit 0 ;;
+esac
+
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_HOME="${TASKLOOP_HOME:-$HOME/.taskloop}"
 mkdir -p "$STATE_HOME/logs"

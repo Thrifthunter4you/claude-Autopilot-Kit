@@ -23,7 +23,9 @@ from taskloop import config, manifest
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Read/write chunked-run state (the run manifest) "
+                    "for task-loop workers.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("get")

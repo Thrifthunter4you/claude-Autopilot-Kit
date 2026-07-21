@@ -147,12 +147,17 @@ def make_handoff(goal, repo, klass, priority, hint, today, active_dir,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Queue a goal for the task loop.")
-    ap.add_argument("goal")
+    ap.add_argument("goal", help="one-line goal a worker will pursue")
     ap.add_argument("--repo", default=config.DEFAULT_REPO,
                     help="repository the worker runs in (required unless "
                          "default_repo is set in config.yaml)")
-    ap.add_argument("--class", dest="klass", default=config.AUTOPILOT_CLASS)
-    ap.add_argument("--priority", type=int, default=1)
+    ap.add_argument("--class", dest="klass", default=config.AUTOPILOT_CLASS,
+                    help="task class (default: autopilot, the full phase "
+                         "pipeline); gated classes are filed but never "
+                         "auto-run")
+    ap.add_argument("--priority", type=int, default=config.DEFAULT_PRIORITY,
+                    help="0 = most urgent (default: default_priority from "
+                         "config.yaml)")
     ap.add_argument("--hint", default="",
                     help="what context the worker should recall first")
     ap.add_argument("--not-before", dest="not_before", default="",
