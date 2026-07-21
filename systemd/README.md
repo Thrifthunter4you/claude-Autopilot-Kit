@@ -12,6 +12,10 @@ systemctl --user enable --now session-loop.timer
 journalctl --user -u session-loop.service -f     # logs
 ```
 
+Cadence: first activation 5 minutes after boot, then 10 minutes after
+each activation finishes (±2 min jitter) — tune the `[Timer]` block to
+taste.
+
 No systemd? A cron line does the same:
 
 ```
