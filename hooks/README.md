@@ -1,6 +1,6 @@
 # Hooks
 
-Four Claude Code hooks make the task loop ambient — you never invoke it by
+Five Claude Code hooks make the task loop ambient — you never invoke it by
 hand.
 All are fail-open (any error → silent exit 0) and never block your prompt or
 session.
@@ -11,6 +11,7 @@ session.
 | SessionStart | `session_start_context.py` | briefs the new session: queue snapshot, next runnable task, recent mailbox messages |
 | Stop | `stop_queue_nudge.py` | nudges (never edits) when a session leaves an unrunnable note in the queue — give it a concrete goal so the loop can run it |
 | Stop | `stop_crystallize_nudge.py` | spots operations the session derived by hand ≥3× (pipelines/heredocs/long one-liners, normalized) and suggests a dedupe-tagged `task-add` so the loop builds a reusable script; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top one |
+| Stop | `stop_telemetry_nudge.py` | spots reusable scripts the session wrote with no observable fire/usage telemetry (argparse/`main`/`__main__` signal, no log/JSONL sink) and suggests a dedupe-tagged `task-add` to instrument them; `TASKLOOP_AUTO_TELEMETRY=1` auto-files the top one |
 
 Install/refresh/remove (idempotent; backs up `~/.claude/settings.json`):
 

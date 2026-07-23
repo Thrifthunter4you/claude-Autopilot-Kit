@@ -1,7 +1,7 @@
 # How sessions feed the queue (and find the gaps themselves)
 
 The task loop only compounds if tasks keep flowing INTO it. This kit wires
-five producers so the queue fills itself; you rarely file tasks by hand.
+six producers so the queue fills itself; you rarely file tasks by hand.
 
 ## 1. Your prompts (the autopilot-detect hook)
 
@@ -88,6 +88,32 @@ default; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top candidate (one
 per stop). Over time this producer turns your sessions' habits into a
 toolbox: the loop writes the scripts, and later sessions call them
 instead of re-deriving.
+
+## 6. Reusable scripts with no telemetry (the telemetry nudge)
+
+A script the loop will run again and again but that emits nothing — no
+counts, no trace of when it fired or on what — is invisible the first time
+it misbehaves in the background: a silent no-op looks identical to a healthy
+quiet run. A one-line JSONL fire/usage log written from birth turns every
+later debug, trace, and cost question into a `tail`.
+[`hooks/stop_telemetry_nudge.py`](../hooks/stop_telemetry_nudge.py) closes
+the gap at session Stop: it scans what the session actually WROTE (no
+arbitrary file reads) and flags any reusable script — a code file past a
+size floor (`TASKLOOP_TELEMETRY_MIN_CHARS`) carrying an entrypoint signal
+(argparse, `def main`, `__main__`, `sys.argv`) — whose content shows no
+telemetry marker (no fire/usage log, no logging, no `.jsonl` sink):
+
+    task-add "Add fire/usage telemetry (a small env-overridable JSONL log)
+    to this reusable script: <name>" --repo <repo> --dedupe-tag "[telemetry:<hash>]"
+
+It is deliberately conservative — plain modules, config, tests, and
+already-logged scripts are left alone — so the nudge stays rare and worth
+acting on. The tag (a hash of the script path) makes re-suggesting a no-op,
+and a ledger guarantees one nudge per script, ever. Suggest-only by default;
+`TASKLOOP_AUTO_TELEMETRY=1` auto-files the top candidate (one per stop). This
+producer is the mirror image of the crystallize nudge: that one gets scripts
+BUILT, this one gets them INSTRUMENTED — so the toolbox the loop grows is
+observable, not a set of black boxes.
 
 ## Triage: notes → runnable tasks
 
