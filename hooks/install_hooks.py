@@ -31,12 +31,20 @@ KIT_HOOKS = {
     "SessionStart": [
         f"python3 {KIT}/hooks/session_start_context.py",
     ],
+    "PreToolUse": [
+        f"python3 {KIT}/hooks/pretool_toolbox_nudge.py",
+    ],
     "Stop": [
         f"python3 {KIT}/hooks/stop_queue_nudge.py",
         f"python3 {KIT}/hooks/stop_crystallize_nudge.py",
         f"python3 {KIT}/hooks/stop_telemetry_nudge.py",
     ],
 }
+
+# Tool-name matcher per event; "*" (every tool) unless narrowed here. The
+# toolbox nudge only ever inspects shell commands, so don't invoke it for
+# Read/Edit/etc.
+EVENT_MATCHER = {"PreToolUse": "Bash"}
 
 
 def _load() -> dict:
@@ -54,8 +62,9 @@ def _is_kit_cmd(cmd: str) -> bool:
     return str(KIT) in (cmd or "")
 
 
-def _entry(cmd: str) -> dict:
-    return {"matcher": "*", "hooks": [{"type": "command", "command": cmd}]}
+def _entry(cmd: str, matcher: str = "*") -> dict:
+    return {"matcher": matcher,
+            "hooks": [{"type": "command", "command": cmd}]}
 
 
 def apply(settings: dict, remove: bool = False) -> dict:
@@ -65,7 +74,8 @@ def apply(settings: dict, remove: bool = False) -> dict:
                   if not any(_is_kit_cmd(h.get("command", ""))
                              for h in g.get("hooks", []))]
         if not remove:
-            groups.extend(_entry(c) for c in cmds)
+            groups.extend(_entry(c, EVENT_MATCHER.get(event, "*"))
+                          for c in cmds)
         if groups:
             hooks[event] = groups
         else:

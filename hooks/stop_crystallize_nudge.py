@@ -15,7 +15,13 @@ TASKLOOP_CRYSTALLIZE_MIN times (default 3). Each flagged operation gets a
 suggested intake with a stable dedupe tag, so filing it twice is impossible:
 
     task-add "Crystallize this repeated operation into a reusable script
-    (with --help): <command>" --repo <repo> --dedupe-tag "[crystallize:<hash>]"
+    (with --help), then register it in the toolbox (`toolbox add`) so future
+    sessions find it: <command>" --repo <repo> --dedupe-tag "[crystallize:<hash>]"
+
+The registration step is what closes the loop: a script nobody can FIND gets
+re-derived anyway. Registered tools are searchable by intent (`toolbox find`),
+carry a contract (`toolbox describe`), log every run, and can declare a
+territory so hooks/pretool_toolbox_nudge.py steers future sessions to them.
 
 Suggest-only by default. Set TASKLOOP_AUTO_CRYSTALLIZE=1 to auto-file the
 top candidate (one per stop, still dedupe-tagged). Idempotent via a ledger
@@ -125,7 +131,8 @@ def _record(hashes) -> None:
 def _goal(raw: str) -> str:
     flat = _WS.sub(" ", raw).replace('"', "'").strip()
     return ("Crystallize this repeated operation into a reusable script "
-            f"(with --help): {flat[:120]}")
+            "(with --help), then register it in the toolbox "
+            f"(`toolbox add`) so future sessions find it: {flat[:120]}")
 
 
 def _auto_file(goal: str, tag: str, repo: str) -> bool:
