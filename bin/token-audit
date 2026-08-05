@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Where did this session's tokens actually go? Parse a Claude Code session
+transcript and rank what's costing you — by CARRY COST, not by size.
+
+    token-audit                          # newest transcript for the CWD's project
+    token-audit path/to/transcript.jsonl
+    token-audit --project ~/dev/myapp --top 15
+
+The one idea this tool exists to teach: **everything that enters the context
+window is re-read on every later turn.** A 20k-token tool result dumped at
+turn 3 of a 60-turn session isn't 20k tokens — it's re-processed ~57 times.
+So the report ranks every context entrant by
+
+    carry = size_estimate x (turns remaining after it appeared)
+
+which is why a modest dump early in a long session routinely out-costs a huge
+dump near the end, and why session-start attachments (CLAUDE.md, injected
+briefings, hook context) usually top the list: they carry for EVERY turn.
+
+Sections:
+  TOTALS        turns + real token counts from the API usage records: output,
+                cache reads, cache WRITES (creation). On cached-prompt
+                pricing, writes cost ~12x reads — a high write total means
+                the prefix keeps changing (cache misses), not heavy reading.
+  TOP CARRIERS  the biggest tool results, ranked by carry — each with the
+                tool that produced it, so you know WHICH habit to change
+                (full-file Read? unfiltered grep? verbose test run?)
+  RE-READS      files Read more than once — pure duplicate carry
+  SESSION-START the injected first-turn context and its full-session carry
+  ADVICE        the ranked cut list, in plain language
+
+Token counts for individual blocks are chars/4 estimates (the API only
+reports per-request totals); good to ~15%, plenty for ranking. Read-only —
+this tool never modifies the transcript or your settings.
+
+Countermeasures for what it finds live in docs/token-economy.md.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def find_transcript(project: str | None) -> Path | None:
+    """Newest .jsonl for a project dir, using Claude Code's path-slug layout
+    (~/.claude/projects/<slugged-abs-path>/<session>.jsonl)."""
+    base = Path(os.environ.get("CLAUDE_DIR", Path.home() / ".claude"))
+    root = Path(project or os.getcwd()).resolve()
+    slug = str(root).replace("/", "-")
+    candidates = sorted((base / "projects" / slug).glob("*.jsonl"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def est_tokens(text: str) -> int:
+    return len(text) // 4
+
+
+def _block_text(content) -> str:
+    """Flatten a message/content block to text for size estimation."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(_block_text(b) for b in content)
+    if isinstance(content, dict):
+        if isinstance(content.get("text"), str):
+            return content["text"]
+        return _block_text(content.get("content") or "")
+    return ""
+
+
+def _tool_hint(name: str, tool_input: dict) -> str:
+    """The most identifying scrap of a tool call, for the report line."""
+    for key in ("file_path", "command", "pattern", "url", "query", "prompt"):
+        val = tool_input.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip().replace("\n", " ")[:70]
+    return ""
+
+
+def analyze(path: Path) -> dict:
+    records = []
+    with open(path, encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    turns = 0                     # assistant responses (per-turn re-read count)
+    usage = {"output_tokens": 0, "cache_read_input_tokens": 0,
+             "cache_creation_input_tokens": 0, "input_tokens": 0}
+    tool_names: dict = {}         # tool_use_id -> "Name(hint)"
+    events = []                   # (record_index, kind, label, est)
+    reads: dict = {}              # file_path -> [record_index, ...]
+    first_user_est = None
+
+    for idx, rec in enumerate(records):
+        msg = rec.get("message") or {}
+        content = msg.get("content")
+        rec_type = rec.get("type")
+
+        if rec_type == "assistant":
+            for key in usage:
+                usage[key] += int((msg.get("usage") or {}).get(key) or 0)
+            if msg.get("usage"):
+                turns += 1
+            if isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        inp = b.get("input") or {}
+                        hint = _tool_hint(b.get("name", "?"), inp)
+                        tool_names[b.get("id")] = (
+                            f"{b.get('name', '?')}"
+                            + (f"({hint})" if hint else ""))
+                        if b.get("name") == "Read" and inp.get("file_path"):
+                            reads.setdefault(
+                                str(inp["file_path"]), []).append(idx)
+
+        elif rec_type == "user" and isinstance(content, list):
+            for b in content:
+                if isinstance(b, dict) and b.get("type") == "tool_result":
+                    est = est_tokens(_block_text(b.get("content")))
+                    label = tool_names.get(b.get("tool_use_id"),
+                                           "tool result")
+                    events.append((idx, "tool_result", label, est))
+        elif rec_type == "user" and first_user_est is None:
+            first_user_est = est_tokens(_block_text(content))
+
+    # Convert record positions to "assistant turns remaining after it".
+    assistant_positions = [i for i, r in enumerate(records)
+                           if r.get("type") == "assistant"
+                           and (r.get("message") or {}).get("usage")]
+
+    def turns_after(record_index: int) -> int:
+        return sum(1 for p in assistant_positions if p > record_index)
+
+    carriers = sorted(
+        ({"label": label, "est": est, "turns_after": turns_after(i),
+          "carry": est * turns_after(i)}
+         for i, _kind, label, est in events),
+        key=lambda c: -c["carry"])
+
+    return {"turns": turns, "usage": usage, "carriers": carriers,
+            "re_reads": {fp: len(ixs) for fp, ixs in reads.items()
+                         if len(ixs) > 1},
+            "first_user_est": first_user_est or 0}
+
+
+def report(a: dict, top: int) -> None:
+    u = a["usage"]
+    print("TOTALS")
+    print(f"  assistant turns:        {a['turns']}")
+    print(f"  output tokens:          {u['output_tokens']:,}")
+    print(f"  cache READS:            {u['cache_read_input_tokens']:,}  "
+          "(cheap — ~0.1x input price)")
+    print(f"  cache WRITES:           {u['cache_creation_input_tokens']:,}  "
+          "(the bill — ~1.25x; high = your prefix keeps changing)")
+    print(f"  uncached input:         {u['input_tokens']:,}")
+
+    print(f"\nTOP CARRIERS  (size x turns-remaining; estimates)")
+    for c in a["carriers"][:top]:
+        print(f"  {c['carry']:>10,}  = {c['est']:>7,}t x {c['turns_after']:>3} "
+              f"turns   {c['label'][:80]}")
+    if not a["carriers"]:
+        print("  (no tool results found)")
+
+    if a["re_reads"]:
+        print("\nRE-READS  (same file Read multiple times = duplicate carry)")
+        for fp, n in sorted(a["re_reads"].items(), key=lambda kv: -kv[1])[:top]:
+            print(f"  {n}x  {fp}")
+
+    start = a["first_user_est"]
+    print(f"\nSESSION-START  first-turn context ≈ {start:,}t; full-session "
+          f"carry ≈ {start * a['turns']:,}t")
+
+    print("\nADVICE (biggest first)")
+    advice = []
+    if a["carriers"] and a["carriers"][0]["carry"] > 5000:
+        c = a["carriers"][0]
+        advice.append(f"- your #1 carrier is {c['label'][:60]} — delegate "
+                      "sweeps like this to a subagent (only the conclusion "
+                      "returns) or bound the output (head/grep/`spill run`)")
+    if a["re_reads"]:
+        advice.append("- re-reads waste carry: read the needed line range "
+                      "once, or keep notes instead of re-opening files")
+    if start * max(a["turns"], 1) > 50_000:
+        advice.append("- session-start context is your dominant carrier: "
+                      "trim CLAUDE.md / hook injections; move detail to "
+                      "on-demand files the agent Reads only when needed")
+    if u["cache_creation_input_tokens"] > u["cache_read_input_tokens"]:
+        advice.append("- cache writes exceed reads: something mutates your "
+                      "prompt prefix every turn (timestamps, counters, "
+                      "reordered context) — stabilize it so caching works")
+    print("\n".join(advice) if advice else "- nothing egregious — this "
+          "session's token shape looks healthy")
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Rank a Claude Code session's token carriers by carry "
+                    "cost (size x turns remaining).")
+    ap.add_argument("transcript", nargs="?",
+                    help="path to a session .jsonl (default: newest for "
+                         "--project / the CWD)")
+    ap.add_argument("--project", default=None,
+                    help="project dir whose newest transcript to audit")
+    ap.add_argument("--top", type=int, default=10,
+                    help="rows per section (default 10)")
+    args = ap.parse_args(argv)
+
+    path = Path(args.transcript) if args.transcript else \
+        find_transcript(args.project)
+    if path is None or not path.exists():
+        print("no transcript found — pass a path to a session .jsonl "
+              "(they live under ~/.claude/projects/<project-slug>/)",
+              file=sys.stderr)
+        return 2
+    print(f"transcript: {path}\n")
+    report(analyze(path), args.top)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

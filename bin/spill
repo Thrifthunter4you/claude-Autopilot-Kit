@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Run a command but keep its FULL output out of the context window: the
+whole thing goes to a spill file, the session sees a bounded preview.
+
+    spill run -- pytest -x -q               # preview + spill file + real exit code
+    spill run --head 40 --tail 10 -- make build
+    spill list                              # recent spills, newest first
+    spill show 1                            # newest spill, bounded preview
+    spill show 1 --grep "ERROR|FAIL"        # just the matching lines (±2 ctx)
+    spill show 1 --full                     # everything (you asked for it)
+
+Why: a 200-line test run pasted into the chat isn't read once — it is
+RE-READ on every later turn of the session (see bin/token-audit's carry
+math). Almost all of that output exists only in case something failed. The
+spill pattern keeps the full text ON DISK, one `spill show --grep` away,
+and puts only head+tail in the conversation — the part that names the
+verdict. The preview always ends with the spill path, so any later turn
+(or a subagent) can drill in without re-running the command.
+
+The command runs argv-style (no shell). For pipelines, wrap them:
+    spill run -- bash -c "make 2>&1 | tee build.log"
+Exit code passes through untouched, so `spill run -- pytest` still fails
+CI when pytest fails. Spills live in ~/.taskloop/spills/ (prunable at will;
+`spill list` shows what's there).
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+SPILL_DIR = Path(os.environ.get("TASKLOOP_HOME",
+                                Path.home() / ".taskloop")) / "spills"
+
+
+def _spills() -> list:
+    try:
+        return sorted(SPILL_DIR.glob("spill-*.txt"),
+                      key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError:
+        return []
+
+
+def _resolve(ref: str) -> Path | None:
+    """A show/list reference: 1-based index into newest-first, or a path."""
+    if ref.isdigit():
+        spills = _spills()
+        idx = int(ref) - 1
+        return spills[idx] if 0 <= idx < len(spills) else None
+    p = Path(ref)
+    return p if p.exists() else None
+
+
+def _preview(text: str, head: int, tail: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= head + tail:
+        return text
+    kept = lines[:head] + [
+        f"... [{len(lines) - head - tail} lines spilled] ..."] + \
+        (lines[-tail:] if tail else [])
+    return "\n".join(kept)
+
+
+def cmd_run(args) -> int:
+    if not args.cmd:
+        print("nothing to run — usage: spill run -- <command> [args...]",
+              file=sys.stderr)
+        return 2
+    SPILL_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = SPILL_DIR / f"spill-{stamp}-{os.getpid()}.txt"
+    try:
+        proc = subprocess.run(args.cmd, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True,
+                              errors="replace")
+    except OSError as exc:
+        print(f"spill: {exc}", file=sys.stderr)
+        return 127
+    header = f"$ {' '.join(args.cmd)}\n[exit {proc.returncode}]\n\n"
+    path.write_text(header + (proc.stdout or ""), encoding="utf-8")
+    print(_preview(proc.stdout or "", args.head, args.tail))
+    print(f"\n[exit {proc.returncode}] full output "
+          f"({len((proc.stdout or '').splitlines())} lines): {path}")
+    return proc.returncode
+
+
+def cmd_list(_args) -> int:
+    spills = _spills()
+    if not spills:
+        print(f"no spills yet ({SPILL_DIR})")
+        return 0
+    for i, p in enumerate(spills[:20], 1):
+        size_kb = p.stat().st_size / 1024
+        first = ""
+        try:
+            first = p.read_text(encoding="utf-8",
+                                errors="replace").splitlines()[0][:70]
+        except (OSError, IndexError):
+            pass
+        stamp = _dt.datetime.fromtimestamp(
+            p.stat().st_mtime).strftime("%m-%d %H:%M")
+        print(f"{i:>3}  {stamp}  {size_kb:>8.1f}K  {first}")
+    return 0
+
+
+def cmd_show(args) -> int:
+    path = _resolve(args.ref)
+    if path is None:
+        print(f"no spill '{args.ref}' — `spill list` shows what exists",
+              file=sys.stderr)
+        return 1
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if args.grep:
+        try:
+            pattern = re.compile(args.grep, re.I)
+        except re.error as exc:
+            print(f"bad --grep regex: {exc}", file=sys.stderr)
+            return 2
+        lines = text.splitlines()
+        shown = set()
+        for i, line in enumerate(lines):
+            if pattern.search(line):
+                shown.update(range(max(0, i - 2), min(len(lines), i + 3)))
+        if not shown:
+            print("(no matches)")
+            return 1
+        last = -2
+        for i in sorted(shown):
+            if i != last + 1:
+                print("...")
+            print(lines[i])
+            last = i
+        return 0
+    print(text if args.full else _preview(text, args.head, args.tail))
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Run commands with bounded output: full text to a spill "
+                    "file, head+tail to the conversation.")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("run", help="run a command; preview + spill file")
+    p.add_argument("--head", type=int, default=30,
+                   help="preview lines from the top (default 30)")
+    p.add_argument("--tail", type=int, default=10,
+                   help="preview lines from the bottom (default 10)")
+    p.add_argument("cmd", nargs=argparse.REMAINDER,
+                   help="the command, after `--`")
+    p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser("list", help="recent spills, newest first")
+    p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("show", help="read a spill (bounded unless --full)")
+    p.add_argument("ref", help="index from `spill list` (1 = newest) or path")
+    p.add_argument("--grep", default="",
+                   help="show only matching lines with ±2 context")
+    p.add_argument("--full", action="store_true")
+    p.add_argument("--head", type=int, default=40)
+    p.add_argument("--tail", type=int, default=20)
+    p.set_defaults(fn=cmd_show)
+
+    args = ap.parse_args(argv)
+    if getattr(args, "cmd", None) and args.cmd and args.cmd[0] == "--":
+        args.cmd = args.cmd[1:]
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
