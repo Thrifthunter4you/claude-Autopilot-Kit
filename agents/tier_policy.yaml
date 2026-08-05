@@ -1,0 +1,38 @@
+# Tier policy — the SINGLE SOURCE OF TRUTH for which model tier each fleet
+# agent runs on.
+#
+# Why this file exists: tier assignments drift. Someone bumps one agent "just
+# for this run", a copy-paste mints a new leaf on the wrong tier, and six
+# weeks later your cheap sweep fleet is quietly running on your most
+# expensive model (or worse — your money-path judge is running on the
+# cheapest). A policy file nobody checks is just a wish, so
+# tests/test_tier_policy.py RECONCILES this file against every agents/*.md
+# frontmatter on every test run: any divergence fails the suite.
+#
+# To change an agent's tier: edit BOTH this file and the agent's `model:`
+# line, in the same commit, deliberately. That friction is the feature.
+#
+# Tier meanings (see AGENT_DESIGN.md "Model tiering"):
+#   cheap    high-volume conclusions-only work — sweeps, fetches, dedup,
+#            verbatim test runs. Never precision-critical reading.
+#   mid      judgment under bounded scope — verify, judge, critique, fix.
+#   premium  "inherit" (no model: line): the agent rides the session model,
+#            so the ONE synthesis stage runs on the best model you have
+#            while the fan-out stages ran cheap.
+
+tiers:
+  cheap:   {model: haiku,   use_for: "sweep / fetch / dedup / test-run leaves"}
+  mid:     {model: sonnet,  use_for: "verify / judge / critic / fixer / triage"}
+  premium: {model: inherit, use_for: "synthesis only — never fan this out"}
+
+agents:
+  scout:        {tier: cheap, rationale: "recon; conclusions only, volume work"}
+  wf-finder:    {tier: cheap, rationale: "sweep leaf; findings are re-verified downstream"}
+  wf-dedup:     {tier: cheap, rationale: "fuzzy canonicalization; low stakes"}
+  wf-tester:    {tier: cheap, rationale: "runs a supplied command verbatim"}
+  wf-verifier:  {tier: mid,  rationale: "adversarial refutation needs judgment"}
+  wf-judge:     {tier: mid,  rationale: "scoring/ranking shapes the outcome"}
+  wf-critic:    {tier: mid,  rationale: "naming what's missing needs judgment"}
+  wf-fixer:     {tier: mid,  rationale: "mutates files; cheap-tier diffs bite back"}
+  triage-judge: {tier: mid,  rationale: "promote/park calls gate unattended autonomy"}
+  wf-synth:     {tier: premium, rationale: "single final stage; integrates everything"}

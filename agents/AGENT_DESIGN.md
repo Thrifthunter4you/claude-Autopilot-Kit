@@ -82,6 +82,12 @@ Two caveats learned the hard way:
 - **Pin the model explicitly in dispatches.** An unpinned dispatch silently
   rides whatever the session default happens to be that day.
 
+Tier assignments drift unless something enforces them, so the fleet's tiers
+live in [`tier_policy.yaml`](tier_policy.yaml) — one file, one rationale per
+agent — and `tests/test_tier_policy.py` reconciles every agent's `model:`
+line against it on each test run. The token math behind the tiering is in
+[docs/token-economy.md](../docs/token-economy.md).
+
 ## The standard leaf fleet
 
 | Agent | Role | One-line contract |
