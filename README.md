@@ -1,12 +1,15 @@
-# claude-workflow-kit
+# Claude Autopilot Kit
 
-**claude-workflow-kit** turns [Claude Code](https://claude.com/claude-code)
-into an unattended engineering loop: queue a one-line goal and it gets
-researched, designed, planned, executed, and reported — one clean context
-window per phase, every step on disk. It is four pieces that compose: a
-file-backed **task loop**, **hooks** that make sessions queue their own
-work, a tiered **agent fleet**, and **memory/context MCP servers** that
-give every session state awareness.
+The **Claude Autopilot Kit** (package name `claude-workflow-kit`) turns
+[Claude Code](https://claude.com/claude-code) into an unattended
+engineering loop: queue a one-line goal and it gets researched, designed,
+planned, executed, and reported — one clean context window per phase,
+every step on disk. It is six pieces that compose: a file-backed **task
+loop**, **hooks** that make sessions queue their own work, a tiered
+**agent fleet**, a **script toolbox** that turns repeated operations into
+registered tools, **token tooling** that shows where long sessions
+actually spend, and **memory/context MCP servers** that give every
+session state awareness.
 
 ```
 you: "add rate limiting to the API"
@@ -43,12 +46,28 @@ LOOP_RESULT: {"status":"done","outcome":"rate limiting shipped, 12 tests green"}
 - [**`hooks/`**](hooks/README.md) — prompt-time build-initiative detection,
   stop-time "make it runnable" queue nudges, repeated-operation
   crystallize nudges (hand-derived it 3×? the loop builds you a script),
-  session-start state briefing. Installed idempotently into
-  `~/.claude/settings.json` by
+  a territory nudge that steers sessions to registered tools instead of
+  hand-derived commands, session-start state briefing. Installed
+  idempotently into `~/.claude/settings.json` by
   [`hooks/install_hooks.py`](hooks/install_hooks.py).
+- **The toolbox** ([`taskloop/toolbox.py`](taskloop/toolbox.py) +
+  [`bin/toolbox`](bin/toolbox)) — a registry that makes every reusable
+  script findable by intent (`toolbox find "restart the api"`),
+  self-describing, runnable by name, and telemetered from birth; entries
+  can declare a `territory` regex the PreToolUse hook defends. Example
+  registry: [`toolbox.example.yaml`](toolbox.example.yaml).
+- **Token tooling** ([`bin/token-audit`](bin/token-audit) +
+  [`bin/spill`](bin/spill) +
+  [`docs/token-economy.md`](docs/token-economy.md)) — rank a session's
+  token carriers by carry cost (size × turns remaining), keep bulk
+  command output out of the context window, and the working model of why
+  cache *writes*, not reads, are the bill.
 - [**`agents/`**](agents/AGENT_DESIGN.md) — a tiered subagent fleet
   (finder/verifier/judge/critic/dedup/tester/fixer/synth/scout/
-  triage-judge) plus the design guide and a template for minting your own.
+  triage-judge) plus the design guide, a template for minting your own,
+  and [`tier_policy.yaml`](agents/tier_policy.yaml) — the single source
+  of truth for who runs on which model tier, drift-linted by the test
+  suite.
 - [**`mcp/`**](mcp/README.md) — two dependency-light MCP servers:
   persistent file-based **memory** (save/search/read/list) and **context
   packs** (memory + grep + git-history legs, budget-bounded).
@@ -76,7 +95,7 @@ Python you can read in an afternoon.
 Requires **Python 3.10+**, **PyYAML**, and the **`claude` CLI** on PATH.
 
 ```bash
-git clone https://github.com/OWNER/claude-workflow-kit.git ~/claude-workflow-kit
+git clone https://github.com/OWNER/claude-Autopilot-Kit.git ~/claude-workflow-kit
 cd ~/claude-workflow-kit
 python3 -m pip install --user pyyaml   # or: sudo apt install python3-yaml
 ./install.sh
@@ -119,6 +138,22 @@ python3 -m json.tool ~/.taskloop/runs/<run_id>.json   # phase progress
 # into any Claude Code session auto-queues it.
 ```
 
+Standalone taste (no queue required):
+
+```bash
+# Where did that long session's tokens go? Biggest carriers first:
+token-audit ~/.claude/projects/<project-slug>/<session>.jsonl
+
+# Run something noisy without pasting 500 lines into the conversation:
+spill run -- pytest -x -q          # preview + spill file + real exit code
+
+# Register a script once, find and run it by name forever:
+toolbox add --name db-health --description "quick db health check" \
+            --cmd "python3 ~/scripts/db_health.py"
+toolbox find "health"
+toolbox run db-health
+```
+
 ## The ideas that matter
 
 1. **Chunked context.** No run ever lives in one context window. Each
@@ -133,11 +168,22 @@ python3 -m json.tool ~/.taskloop/runs/<run_id>.json   # phase progress
 3. **Critics instead of approvals.** Design and plan phases are gated by
    adversarial critic subagents with one repair round; unresolvable gaps
    park `needs-human` with the exact question a human must answer.
-4. **Tier the fleet.** Cheap models sweep, mid models judge, your best
-   model only synthesizes. See
-   [agents/AGENT_DESIGN.md](agents/AGENT_DESIGN.md).
-5. **Files over databases.** Queue, manifest, memory, mailbox — all plain
-   files: greppable, diffable, hand-editable, recoverable.
+4. **Tier the fleet — and lint the tiers.** Cheap models sweep, mid models
+   judge, your best model only synthesizes; the assignments live in ONE
+   policy file the test suite reconciles against every agent definition.
+   See [agents/AGENT_DESIGN.md](agents/AGENT_DESIGN.md).
+5. **Tokens are carry, not size.** Everything entering the context window
+   is re-read every later turn, so cost ≈ size × turns remaining — which
+   makes session-start attachments and early dumps the real bill.
+   `token-audit` measures it; `spill`, subagent delegation, and on-demand
+   loading cut it. See [docs/token-economy.md](docs/token-economy.md).
+6. **Scripts beat re-derivation.** The third hand-assembled pipeline
+   becomes a queued script task (crystallize), the built script gets
+   registered (`toolbox add`), and a hook steers future sessions to
+   `toolbox run` instead of deriving it a fourth time — with `toolbox
+   stats` showing whether any of it is actually used.
+7. **Files over databases.** Queue, manifest, memory, mailbox, registry —
+   all plain files: greppable, diffable, hand-editable, recoverable.
 
 ## Safety
 
