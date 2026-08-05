@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""The script registry CLI: register a reusable script once, then find,
+inspect, and run it by name — from any session, forever.
+
+    toolbox add --name db-health --description "one-line health check" \\
+                --cmd "python3 ~/scripts/db_health.py" \\
+                --args "[--verbose]" --output "one OK/FAIL line per table"
+    toolbox find "health check"        # keyword-scored lookup
+    toolbox describe db-health         # contract: args, output, territory
+    toolbox run db-health --verbose    # canonical invocation (+ fire record)
+    toolbox list                       # everything registered
+    toolbox stats                      # who actually gets used (and nudged)
+    toolbox remove db-health
+
+Playbooks (multi-step tools) register with repeated --step, and take
+KEY=VALUE overrides at run time:
+
+    toolbox add --name morning-check --description "queue + health" \\
+                --step "task-list" --step "toolbox run db-health {{table}}" \\
+                --var table=all
+    toolbox run morning-check table=users
+
+Why a registry instead of a scripts directory: names + one-line contracts
+make tools findable by intent (`find "restart the api"`), every run is a
+JSONL fire record (usage is measurable), and a `territory` regex lets the
+PreToolUse hook steer sessions away from re-deriving what a script already
+does. See taskloop/toolbox.py for schema details.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import shlex
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from taskloop import toolbox
+
+
+def _parse_vars(pairs):
+    out = {}
+    for pair in pairs or ():
+        if "=" not in pair:
+            raise SystemExit(f"expected KEY=VALUE, got '{pair}'")
+        key, _, value = pair.partition("=")
+        out[key] = value
+    return out
+
+
+def cmd_add(args) -> int:
+    entry = {"name": args.name, "description": args.description}
+    if args.cmd:
+        entry["cmd"] = shlex.split(args.cmd)
+    if args.step:
+        entry["playbook"] = {"vars": _parse_vars(args.var),
+                             "steps": list(args.step)}
+    for field in ("args", "output", "territory", "unless"):
+        value = getattr(args, field)
+        if value:
+            entry[field] = value
+    if args.enforce:
+        entry["enforce"] = True
+
+    problems = toolbox.validate(
+        entry, {e.get("name") for e in toolbox.load()["tools"]})
+    if problems:
+        for p in problems:
+            print(f"toolbox add: {p}", file=sys.stderr)
+        return 2
+    toolbox.mutate(lambda reg: reg["tools"].append(entry))
+    print(f"registered '{args.name}' in {toolbox.REGISTRY}")
+    if entry.get("territory"):
+        mode = "BLOCK" if entry.get("enforce") else "advisory nudge"
+        print(f"  territory: /{entry['territory']}/ ({mode} via "
+              "hooks/pretool_toolbox_nudge.py)")
+    return 0
+
+
+def cmd_remove(args) -> int:
+    before = len(toolbox.load()["tools"])
+    reg = toolbox.mutate(lambda r: r.update(
+        tools=[e for e in r["tools"] if e.get("name") != args.name]))
+    if len(reg["tools"]) == before:
+        print(f"no tool named '{args.name}'", file=sys.stderr)
+        return 1
+    print(f"removed '{args.name}'")
+    return 0
+
+
+def cmd_list(_args) -> int:
+    tools = toolbox.load()["tools"]
+    if not tools:
+        print("registry is empty — add your first tool with `toolbox add` "
+              f"(file: {toolbox.REGISTRY})")
+        return 0
+    width = max(len(str(e.get("name", ""))) for e in tools)
+    for e in sorted(tools, key=lambda e: str(e.get("name", ""))):
+        kind = "playbook" if e.get("playbook") else "cmd"
+        print(f"{str(e.get('name','')):<{width}}  [{kind}] "
+              f"{str(e.get('description', ''))[:90]}")
+    return 0
+
+
+def cmd_find(args) -> int:
+    hits = toolbox.find(" ".join(args.query))
+    if not hits:
+        print("no match — `toolbox list` shows everything registered")
+        return 1
+    for score, e in hits[:10]:
+        print(f"{score:>3}  {e.get('name')}  — {e.get('description', '')}")
+    return 0
+
+
+def cmd_describe(args) -> int:
+    e = toolbox.get(args.name)
+    if e is None:
+        print(f"no tool named '{args.name}'", file=sys.stderr)
+        return 1
+    print(f"name:        {e.get('name')}")
+    print(f"description: {e.get('description', '')}")
+    if e.get("cmd"):
+        print(f"cmd:         {' '.join(str(a) for a in e['cmd'])}")
+    if e.get("playbook"):
+        variables = e["playbook"].get("vars") or {}
+        if variables:
+            print("vars:        " + " ".join(
+                f"{k}={v}" for k, v in variables.items()))
+        print("steps:")
+        for step in e["playbook"].get("steps") or []:
+            print(f"  - {step}")
+    for field, label in (("args", "args"), ("output", "output"),
+                         ("territory", "territory"), ("unless", "unless")):
+        if e.get(field):
+            print(f"{label + ':':<12} {e[field]}")
+    if e.get("territory"):
+        print(f"enforce:     {bool(e.get('enforce'))} "
+              "(true = the hook BLOCKS hand-derived equivalents)")
+    return 0
+
+
+def cmd_run(args) -> int:
+    entry = toolbox.get(args.name)
+    if entry is None:
+        print(f"no tool named '{args.name}' — try `toolbox find`",
+              file=sys.stderr)
+        return 127
+    if entry.get("playbook"):
+        overrides = _parse_vars([a for a in args.extra if "=" in a])
+        passthrough = [a for a in args.extra if "=" not in a]
+        if passthrough:
+            print(f"toolbox run: playbooks take KEY=VALUE overrides only; "
+                  f"ignoring {passthrough}", file=sys.stderr)
+        return toolbox.run(args.name, var_overrides=overrides)
+    return toolbox.run(args.name, extra_args=args.extra)
+
+
+def cmd_stats(_args) -> int:
+    rows = toolbox.stats()
+    if not rows:
+        print("registry is empty")
+        return 0
+    print(f"{'tool':<28} {'fires':>5} {'ok%':>5} {'nudges':>6} "
+          f"{'blocked':>7}  last run")
+    for name in sorted(rows):
+        s = rows[name]
+        ok_pct = f"{100 * s['ok'] // s['fires']}%" if s["fires"] else "-"
+        last = (_dt.datetime.fromtimestamp(s["last"]).strftime("%Y-%m-%d")
+                if s["last"] else "never")
+        print(f"{name:<28} {s['fires']:>5} {ok_pct:>5} "
+              f"{s['advisory_nudges']:>6} {s['blocked']:>7}  {last}")
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Registry of reusable scripts: register once, then "
+                    "find/describe/run by name. Every run is telemetered.")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("add", help="register a script or playbook")
+    p.add_argument("--name", required=True)
+    p.add_argument("--description", required=True,
+                   help="one plain-language line; this is what `find` scores")
+    p.add_argument("--cmd", default="",
+                   help="the command as one string, e.g. "
+                        "'python3 /path/tool.py' (shlex-split into argv)")
+    p.add_argument("--step", action="append", default=[],
+                   help="playbook step (repeatable); {{var}} interpolates")
+    p.add_argument("--var", action="append", default=[],
+                   help="playbook var default, KEY=VALUE (repeatable)")
+    p.add_argument("--args", default="",
+                   help="argument contract prose shown by describe")
+    p.add_argument("--output", default="",
+                   help="output contract prose shown by describe")
+    p.add_argument("--territory", default="",
+                   help="regex of shell commands this tool OWNS; the "
+                        "PreToolUse hook nudges hand-derived equivalents "
+                        "toward `toolbox run <name>`")
+    p.add_argument("--unless", default="",
+                   help="exemption regex — territory matches carrying this "
+                        "are left alone")
+    p.add_argument("--enforce", action="store_true",
+                   help="territory matches are BLOCKED, not nudged "
+                        "(escape: put TOOLBOX_NUDGE_OVERRIDE in the command)")
+    p.set_defaults(fn=cmd_add)
+
+    p = sub.add_parser("remove", help="unregister a tool by name")
+    p.add_argument("name")
+    p.set_defaults(fn=cmd_remove)
+
+    p = sub.add_parser("list", help="every registered tool, one line each")
+    p.set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("find", help="keyword-scored lookup by intent")
+    p.add_argument("query", nargs="+")
+    p.set_defaults(fn=cmd_find)
+
+    p = sub.add_parser("describe", help="full contract for one tool")
+    p.add_argument("name")
+    p.set_defaults(fn=cmd_describe)
+
+    p = sub.add_parser("run", help="run a tool by name (records a fire)")
+    p.add_argument("name")
+    p.add_argument("extra", nargs=argparse.REMAINDER,
+                   help="extra args (cmd tools) or KEY=VALUE overrides "
+                        "(playbooks)")
+    p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser("stats", help="usage + nudge counts per tool")
+    p.set_defaults(fn=cmd_stats)
+
+    args = ap.parse_args(argv)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

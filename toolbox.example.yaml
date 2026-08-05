@@ -1,0 +1,36 @@
+# Example toolbox registry — copy entries into ~/.taskloop/toolbox.yaml, or
+# register from the CLI (`toolbox add ...`), which writes the same file.
+#
+# Every entry is one reusable tool. Two shapes exist:
+#   cmd:       an argv prefix; `toolbox run <name> [args]` appends your args
+#   playbook:  a list of steps run in order; {{var}} interpolates, KEY=VALUE
+#              at run time overrides the declared defaults
+#
+# Optional territory defense: `territory` is a regex of shell commands this
+# tool OWNS. When a session hand-types a matching command, the PreToolUse
+# hook (hooks/pretool_toolbox_nudge.py) nudges it toward `toolbox run <name>`
+# — or blocks it, if you set `enforce: true`. Start advisory; escalate an
+# entry to enforce only after `toolbox stats` shows its nudges being ignored.
+
+tools:
+  # A plain script with a contract. `find` scores name + description, so
+  # write the description in the words you'd search for.
+  - name: db-health
+    description: quick health check for the app database — connections, sizes
+    cmd: [python3, /home/you/scripts/db_health.py]
+    args: "[--verbose] [TABLE...]"
+    output: one OK/FAIL line per table, nonzero exit on any FAIL
+    territory: "pg_isready|psql\\s+.*-c\\s"
+    unless: "--help"
+    # enforce: true      # uncomment once the advisory nudge proves ignored
+
+  # A playbook: compose registered tools + anything on PATH into one name.
+  # Run as: toolbox run morning-check table=users
+  - name: morning-check
+    description: morning snapshot — task queue plus database health
+    playbook:
+      vars: {table: all}
+      steps:
+        - "task-list"
+        - "toolbox run db-health {{table}}"
+    output: queue summary, then db-health output
