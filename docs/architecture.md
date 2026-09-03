@@ -23,7 +23,8 @@
               │ state: runs/<run_id>.json      │
               └───────────────┬────────────────┘
                               ▼
-                LOOP_RESULT: {"status": ...}
+        structured verdict {"status": ..., "outcome": ...}
+        (CLI --json-schema output — never a transcript line)
               done → queue/done/    continue → requeue (fresh worker resumes)
               needs-human/blocked → parked    crash → strike (3 = parked)
 ```
@@ -36,7 +37,7 @@
 | Intake | [`bin/task-add`](../bin/task-add) | goal → task file; exact-hash + fuzzy dedup, dedupe-tags, follow-on cap |
 | Queue | [`taskloop/queue.py`](../taskloop/queue.py) | eligibility (status/class/lease/strikes/not_before) + selection (priority, then aging) |
 | Drainer | [`taskloop/drainer.py`](../taskloop/drainer.py) | single-flight loop: claim → spawn worker → apply verdict |
-| Worker | [`taskloop/worker.py`](../taskloop/worker.py) | render prompt template → `claude -p` → parse `LOOP_RESULT` |
+| Worker | [`taskloop/worker.py`](../taskloop/worker.py) | render prompt template → `claude -p --output-format json --json-schema` → validate `structured_output` |
 | Manifest | [`taskloop/manifest.py`](../taskloop/manifest.py), [`bin/run-manifest`](../bin/run-manifest) | chunked-run state: phases, execute tasks, profile |
 | Autopilot skill | [`skills/autopilot/SKILL.md`](../skills/autopilot/SKILL.md) | the conductor protocol each worker follows |
 | Hooks | [`hooks/*.py`](../hooks/README.md) | prompt-time detection, stop-time queue nudges, session-start state |
@@ -59,10 +60,15 @@ Three design consequences:
 
 1. **The manifest is the only memory between units.** If it isn't saved, the
    work didn't happen — workers persist after every task, before yielding.
-2. **The verdict line is the only protocol.** Workers end with one
-   machine-parseable `LOOP_RESULT` line; everything else in the transcript is
-   free-form. Crashed workers (no line) get strikes; three strikes parks the
-   task `needs-human` instead of retrying forever.
+2. **The structured verdict is the only protocol.** Workers are spawned
+   with `--output-format json --json-schema`, so the CLI itself constrains
+   the final answer to `{status, outcome}` and returns it in the envelope's
+   `structured_output`; Python re-validates it (exact keys, known status,
+   140-char outcome) and there is no fallback to transcript text — a magic
+   `LOOP_RESULT:` line was forgeable by any file the worker read. Everything
+   else in the transcript is free-form. Crashed or invalid workers get
+   strikes; three strikes parks the task `needs-human` instead of retrying
+   forever.
 3. **The conductor stays thin.** Inside a worker, each phase runs in a fresh
    subagent; the conductor holds only artifact paths + summaries. Context
    isolation applies at both layers.

@@ -31,5 +31,9 @@ Only file work you actually verified is missing. Duplicates are auto-rejected
 and a daily cap applies; a non-zero task-add exit is NEVER a task failure —
 move on.
 
-STEP 4 — finish with EXACTLY ONE line, last, machine-parseable:
-  LOOP_RESULT: {{"status": "<done|needs-human|blocked>", "outcome": "<=140 chars"}}
+STEP 4 — your final answer IS the verdict. The CLI asked you for a structured
+result with exactly two fields:
+  status:  one of done | needs-human | blocked
+  outcome: at most 140 characters — what happened, or what a human must do
+Do not print a verdict line into the transcript; the structured result the
+CLI collects is the only thing the drainer reads.

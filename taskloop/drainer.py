@@ -155,11 +155,11 @@ def apply_verdict(h: Handoff, result) -> None:
         h.update_loop(status=status, lease="", outcome=outcome)
         h.save()
         _log(f"{status.upper()} {h.path.name}: {outcome}")
-    else:  # crash / no LOOP_RESULT
+    else:  # crash / no valid verdict
         strikes = int(lp.get("strikes", 0)) + 1
         if strikes >= config.MAX_STRIKES:
             h.update_loop(status="needs-human", lease="", strikes=strikes,
-                          outcome="worker crashed repeatedly (no LOOP_RESULT)")
+                          outcome="worker crashed repeatedly (no valid verdict)")
             _log(f"PARKED {h.path.name} after {strikes} strikes")
         else:
             h.update_loop(status="todo", lease="", strikes=strikes)

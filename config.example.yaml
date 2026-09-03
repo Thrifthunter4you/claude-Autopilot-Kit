@@ -22,6 +22,16 @@ spawn_stagger_s: 8
 # Seconds before a worker is presumed hung and its process abandoned.
 worker_timeout_s: 21600
 
+# Effort level passed as --effort to every worker: low, medium, high, xhigh,
+# max. Empty = the CLI's default. Raise it for phases that reason more than
+# they type (design, plan, review); the tier policy still picks the model.
+worker_effort: ""
+
+# Print-mode workers are killed — verdict-less — once background tasks outlive
+# a wait ceiling (CLI default 600 s). 0 lifts the ceiling so worker_timeout_s
+# is the only bound; -1 leaves the CLI default in place.
+worker_bg_wait_ceiling_ms: 0
+
 # Queue semantics.
 default_class: safe
 gated_classes: ["destructive"]   # never auto-run

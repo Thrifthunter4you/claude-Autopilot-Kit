@@ -24,7 +24,8 @@ drainer ──► claude -p (worker 1): research  ──► manifest
         ──► claude -p (worker 4..n): execute (≤3 tasks each)
         ──► claude -p (final): finish + report
         ▼
-LOOP_RESULT: {"status":"done","outcome":"rate limiting shipped, 12 tests green"}
+verdict (schema-validated CLI output, not transcript text):
+  {"status":"done","outcome":"rate limiting shipped, 12 tests green"}
 ```
 
 **Contents:** [What's in the box](#whats-in-the-box) ·

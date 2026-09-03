@@ -22,5 +22,10 @@ manifest with a clean context window. Emit "done" ONLY after the finish phase
 completes. Never try to run the whole plan in one process — the three-task /
 45-minute cap is the context and risk boundary.
 
-Finish with EXACTLY ONE line, last, machine-parseable:
-  LOOP_RESULT: {{"status": "<continue|done|needs-human|blocked>", "outcome": "<=140 chars"}}
+FINISH — your final answer IS the verdict. The CLI asked you for a structured
+result with exactly two fields:
+  status:  one of continue | done | needs-human | blocked
+  outcome: at most 140 characters — the unit done and what comes next
+"continue" after one unit (a FRESH worker resumes from the manifest); "done"
+only after the finish phase. Do not print a verdict line into the transcript;
+the structured result the CLI collects is the only thing the drainer reads.

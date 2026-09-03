@@ -23,5 +23,9 @@ For each CONFIRMED defect (skip this entirely if you find none):
      what gives a re-detected defect exactly one deduped task and a clean
      file zero.
 
-Finish with EXACTLY ONE line, last, machine-parseable:
-  LOOP_RESULT: {{"status": "<done|needs-human|blocked>", "outcome": "<=140 chars"}}
+FINISH — your final answer IS the verdict. The CLI asked you for a structured
+result with exactly two fields:
+  status:  one of done | needs-human | blocked
+  outcome: at most 140 characters — what happened, or what a human must do
+Do not print a verdict line into the transcript; the structured result the
+CLI collects is the only thing the drainer reads.

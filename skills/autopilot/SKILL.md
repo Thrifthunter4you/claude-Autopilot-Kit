@@ -30,8 +30,9 @@ Agent dispatch takes `run_in_background: false`, and every long Bash (test
 suites, builds) runs FOREGROUND with an explicit `timeout`. Never end your
 turn while background tasks are still running: in a `claude -p` worker the
 harness terminates the whole session once the background-wait ceiling expires
-(no LOOP_RESULT → the drainer strikes the task; enough strikes parks a healthy
-run). "I'll wait for the subagent's notification" is an interactive-session
+(no verdict → the drainer strikes the task; enough strikes parks a healthy
+run). The kit lifts that ceiling for its own workers (`worker_bg_wait_ceiling_ms`),
+but foreground dispatch is still the rule: the worker timeout is the bound. "I'll wait for the subagent's notification" is an interactive-session
 pattern — in CHUNKED mode it is a session kill. Blocking synchronously on the
 dispatch is always correct here: the conductor has nothing else to do, and the
 worker's own timeout is the outer bound.
@@ -43,7 +44,7 @@ worker's own timeout is the outer bound.
   execute, complete **up to THREE small, independent plan tasks**, stopping
   earlier after 45 minutes of execute work or at the first task that needs
   substantial investigation, review, or repair. Persist progress to the run
-  manifest after EACH task, then **STOP and yield** with `LOOP_RESULT` status
+  manifest after EACH task, then **STOP and yield** with verdict status
   `continue`. The drainer re-queues the task and spawns a FRESH worker for
   the next unit — so *your own* context also stays small, not just each
   phase's. The on-disk manifest is the handoff between units; never re-run
@@ -132,8 +133,8 @@ the fix. Park `needs-human` ONLY if (a) the second verdict is still
 `fatal-gap`, or (b) the gap is a genuine business/scope decision the goal
 doesn't answer — never guess on a wrong-thing risk that survives repair. On
 park, record BOTH verdicts in the phase summary (so a human can write the
-answer into the task file's `DESIGN RESOLUTION` section) and emit
-`LOOP_RESULT: {"status":"needs-human","outcome":"design gap: <reason>"}`.
+answer into the task file's `DESIGN RESOLUTION` section) and return the
+verdict `{"status":"needs-human","outcome":"design gap: <reason>"}`.
 Record the phase. **One unit** → checkpoint & yield (§6). The repair round is
 part of the same design unit — do not yield between critic and repair.
 
@@ -201,15 +202,18 @@ Dispatch a finish subagent: broad review across the run's commits +
 artifacts, write `docs/reports/<run_id>-report.md` (what shipped, per-task
 outcomes, anything deferred). `run-manifest mark-phase <run_id> finish done`.
 
-Then emit the **terminal** line (this is the ONLY phase that emits `done`):
+Then return the **terminal** verdict (this is the ONLY phase that returns
+`done`). In CHUNKED mode the verdict is your structured final answer — the
+CLI collects it under `--json-schema`; never print it as a transcript line:
 
-`LOOP_RESULT: {"status":"done","outcome":"<=140 chars: what shipped>"}`
+`{"status":"done","outcome":"<=140 chars: what shipped>"}`
 
 Use `blocked` if an external dependency stopped you, `needs-human` if a
 guardrail or critic halted the run.
 
-DIRECT mode: after emitting the terminal line — whichever status — clear the
-lease you claimed in §0 step 0.
+DIRECT mode: state the same verdict object as your last line (there is no
+CLI schema in an interactive session) and, whichever status, clear the lease
+you claimed in §0 step 0.
 
 ## 6. CHECKPOINT & YIELD (CHUNKED mode)
 
@@ -217,8 +221,9 @@ After you finish ONE unit (a phase in §1–§3, or one task in §4) **and the
 manifest is saved** (every run-manifest mutation saves atomically):
 
 1. Confirm the unit's progress is recorded — a fresh worker must not redo it.
-2. Emit EXACTLY this terminal line and STOP — do not start the next unit:
-   `LOOP_RESULT: {"status":"continue","outcome":"<=140 chars: unit done; next: <what's next>"}`
+2. Return EXACTLY this verdict as your final answer and STOP — do not start
+   the next unit:
+   `{"status":"continue","outcome":"<=140 chars: unit done; next: <what's next>"}`
 
 The drainer sees `continue`, re-queues the task as `todo`, clears the lease,
 and immediately spawns a FRESH worker that re-enters this skill, reloads the

@@ -103,6 +103,12 @@ WORKER_MODEL = str(_get("worker_model", "sonnet"))
 #   claude_args: ["--dangerously-skip-permissions"]
 CLAUDE_ARGS = _get_list("claude_args", ["--permission-mode", "acceptEdits"])
 WORKER_TIMEOUT_S = int(_get("worker_timeout_s", 6 * 3600))
+# --effort for every worker (low|medium|high|xhigh|max); "" = CLI default.
+WORKER_EFFORT = str(_get("worker_effort", "")).strip().lower()
+# Print mode kills a session whose background tasks outlive a wait ceiling
+# (600 s by default) — with no verdict.  0 lifts the ceiling so
+# worker_timeout_s is the only bound; -1 leaves the CLI default untouched.
+WORKER_BG_WAIT_CEILING_MS = int(_get("worker_bg_wait_ceiling_ms", 0))
 MAX_CONCURRENCY = int(_get("max_concurrency", 1))
 SPAWN_STAGGER_S = int(_get("spawn_stagger_s", 8))
 # Pipeline profiles the autopilot skill may record in a run manifest.
