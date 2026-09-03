@@ -50,8 +50,12 @@ class TestProjectInstall:
         assert not (tmp_path / "claude").exists()
         data = json.loads(target.read_text())
         assert len(_kit_cmds(data)) == len(ih.KIT_HOOKS)
-        bash_groups = data["hooks"]["PreToolUse"]
-        assert all(g["matcher"] == "Bash" for g in bash_groups)
+        # every registered hook lands under its own event with its own matcher
+        for event, matcher, cmd in ih.KIT_HOOKS:
+            assert any(g["matcher"] == matcher and
+                       g["hooks"][0]["command"] == cmd
+                       for g in data["hooks"][event]), (event, matcher)
+        assert all(g["matcher"] != "*" for g in data["hooks"]["PreToolUse"])
 
     def test_foreign_hook_survives_and_kit_is_idempotent(self, tmp_path):
         target = ih.project_settings(tmp_path)

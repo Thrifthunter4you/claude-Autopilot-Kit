@@ -20,7 +20,11 @@ Rules that keep it healthy:
 2. **The index is a table of contents, never a content store.** `MEMORY.md`
    gets one line per memory. Cap it (~200 lines); when it grows past that,
    archive settled entries. A session loads the index cheaply and pulls
-   bodies only when relevant.
+   bodies only when relevant. Past the harness cap the TAIL is dropped
+   silently — the freshest pointer is the first casualty — and a bullet
+   that grew into a paragraph is mirroring its memory instead of pointing
+   at it. [`hooks/posttool_memory_budget.py`](../hooks/posttool_memory_budget.py)
+   warns on both after every edit.
 
 3. **Don't write what another store already records.** Deployment notes are
    git history. Code structure is the code. If it's derivable, don't

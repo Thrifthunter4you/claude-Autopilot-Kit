@@ -1,17 +1,21 @@
 # Hooks
 
-Six Claude Code hooks make the task loop ambient — you never invoke it by
+Eight Claude Code hooks make the task loop ambient — you never invoke it by
 hand. They are a **per-project opt-in**: installed into
 `<project>/.claude/settings.local.json`, so they fire only in sessions
 started inside a repository you enabled, never machine-wide.
-All are fail-open (any error → silent exit 0); only the toolbox nudge can
-block, and only for registry entries you explicitly mark `enforce: true`.
+All are fail-open (any error → silent exit 0); only the toolbox nudge (for
+registry entries you explicitly mark `enforce: true`) and the spill read
+guard (unbounded reads of spill files) can block, and both name the way
+through.
 
 | Event | Hook | What it does |
 |---|---|---|
 | UserPromptSubmit | `userprompt_autopilot_detect.py` | classifies every prompt (clear/fuzzy/none build initiative) and injects an `<autopilot-detect>` directive telling the agent to queue clear asks via `task-go` |
 | SessionStart | `session_start_context.py` | briefs the new session: queue snapshot, next runnable task, recent mailbox messages |
 | PreToolUse (Bash) | `pretool_toolbox_nudge.py` | when a shell command re-derives what a registered tool already does (its `territory` regex matches), nudges toward `toolbox run <name>` — advisory by default (once per session per tool), a hard block for entries marked `enforce: true`; escape marker `TOOLBOX_NUDGE_OVERRIDE`, kill switch `TOOLBOX_NUDGE_DISABLE=1` |
+| PreToolUse (Read) | `pretool_spill_read_guard.py` | denies an UNBOUNDED Read of a file under `~/.taskloop/spills/` — the bulk `spill run` kept out of context — and names the bounded ways in (`spill show --grep`, `--head/--tail`, Read with offset+limit); small spills and Reads with a `limit` pass; kill switch `TASKLOOP_SPILL_GUARD_DISABLE=1` |
+| PostToolUse (Write/Edit) | `posttool_memory_budget.py` | after any edit to a `MEMORY.md`, warns (never blocks) when the index is over its line/byte budget — past the harness cap the tail is silently dropped at session start — or carries bullets over 200 chars, with a trimmed pointer-form suggestion per line; budgets env-tunable, kill switch `TASKLOOP_MEMORY_BUDGET_DISABLE=1` |
 | Stop | `stop_queue_nudge.py` | nudges (never edits) when a session leaves an unrunnable note in the queue — give it a concrete goal so the loop can run it |
 | Stop | `stop_crystallize_nudge.py` | spots operations the session derived by hand ≥3× (pipelines/heredocs/long one-liners, normalized) and suggests a dedupe-tagged `task-add` so the loop builds a reusable script — which then gets REGISTERED (`toolbox add`), closing the loop the PreToolUse nudge defends; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top one |
 | Stop | `stop_telemetry_nudge.py` | spots reusable scripts the session wrote with no observable fire/usage telemetry (argparse/`main`/`__main__` signal, no log/JSONL sink) and suggests a dedupe-tagged `task-add` to instrument them; `TASKLOOP_AUTO_TELEMETRY=1` auto-files the top one |

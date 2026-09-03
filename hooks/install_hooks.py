@@ -39,6 +39,8 @@ KIT_HOOKS = [
     ("UserPromptSubmit", "*", f"python3 {KIT}/hooks/userprompt_autopilot_detect.py"),
     ("SessionStart", "*", f"python3 {KIT}/hooks/session_start_context.py"),
     ("PreToolUse", "Bash", f"python3 {KIT}/hooks/pretool_toolbox_nudge.py"),
+    ("PreToolUse", "Read", f"python3 {KIT}/hooks/pretool_spill_read_guard.py"),
+    ("PostToolUse", "Write|Edit|MultiEdit", f"python3 {KIT}/hooks/posttool_memory_budget.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_queue_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_crystallize_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_telemetry_nudge.py"),
