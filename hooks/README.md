@@ -1,7 +1,9 @@
 # Hooks
 
 Six Claude Code hooks make the task loop ambient — you never invoke it by
-hand.
+hand. They are a **per-project opt-in**: installed into
+`<project>/.claude/settings.local.json`, so they fire only in sessions
+started inside a repository you enabled, never machine-wide.
 All are fail-open (any error → silent exit 0); only the toolbox nudge can
 block, and only for registry entries you explicitly mark `enforce: true`.
 
@@ -14,11 +16,19 @@ block, and only for registry entries you explicitly mark `enforce: true`.
 | Stop | `stop_crystallize_nudge.py` | spots operations the session derived by hand ≥3× (pipelines/heredocs/long one-liners, normalized) and suggests a dedupe-tagged `task-add` so the loop builds a reusable script — which then gets REGISTERED (`toolbox add`), closing the loop the PreToolUse nudge defends; `TASKLOOP_AUTO_CRYSTALLIZE=1` auto-files the top one |
 | Stop | `stop_telemetry_nudge.py` | spots reusable scripts the session wrote with no observable fire/usage telemetry (argparse/`main`/`__main__` signal, no log/JSONL sink) and suggests a dedupe-tagged `task-add` to instrument them; `TASKLOOP_AUTO_TELEMETRY=1` auto-files the top one |
 
-Install/refresh/remove (idempotent; backs up `~/.claude/settings.json`):
+Install/refresh/remove for one project (idempotent; backs up the file it
+edits; never touches hooks that aren't the kit's):
 
 ```bash
-python3 hooks/install_hooks.py [--dry-run | --remove]
+python3 hooks/install_hooks.py --project ~/dev/myapp [--dry-run | --remove]
 ```
+
+The `*` matcher in the table means "every tool for that event **within an
+opted-in project**" — it is event/tool matching, not a scope mechanism.
+Upgrading from a kit that wrote `~/.claude/settings.json` (v0.2 or earlier):
+`python3 hooks/install_hooks.py --remove-global` strips only the kit's own
+entries from that file. `--global` still exists for people who want every
+session on the machine hooked, and prints what that implies.
 
 How the queue-side hooks work together to keep the queue fed:
 [../docs/queueing-and-gap-finding.md](../docs/queueing-and-gap-finding.md).

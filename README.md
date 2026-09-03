@@ -49,9 +49,10 @@ verdict (schema-validated CLI output, not transcript text):
   stop-time "make it runnable" queue nudges, repeated-operation
   crystallize nudges (hand-derived it 3×? the loop builds you a script),
   a territory nudge that steers sessions to registered tools instead of
-  hand-derived commands, session-start state briefing. Installed
-  idempotently into `~/.claude/settings.json` by
-  [`hooks/install_hooks.py`](hooks/install_hooks.py).
+  hand-derived commands, session-start state briefing. A per-project
+  opt-in: [`hooks/install_hooks.py --project <repo>`](hooks/install_hooks.py)
+  writes `<repo>/.claude/settings.local.json`, so nothing fires in
+  sessions outside the repositories you enabled.
 - **The toolbox** ([`taskloop/toolbox.py`](taskloop/toolbox.py) +
   [`bin/toolbox`](bin/toolbox)) — a registry that makes every reusable
   script findable by intent (`toolbox find "restart the api"`),
@@ -108,8 +109,10 @@ python3 -m pip install --user pyyaml   # or: sudo apt install python3-yaml
 Replace `OWNER` with this repository's owner (or copy the clone URL from
 the **Code** button above). `install.sh` symlinks the bins into
 `~/.local/bin`, creates the `~/.taskloop` state home, installs the hooks
-(after backing up `~/.claude/settings.json`), and links the agents and
-autopilot skill — it is idempotent, so re-run it after every `git pull`.
+and links the agents and autopilot skill — it is idempotent, so re-run it
+after every `git pull`. Hooks are enabled per repository:
+`./install.sh --project ~/dev/yourproject` (repeat for each repo you want
+hooked; nothing is armed machine-wide).
 
 Optional: `python3 -m pip install --user mcp` for the
 [MCP servers](mcp/README.md), `pytest` to run the test suite.
@@ -138,8 +141,8 @@ tail -f ~/.taskloop/logs/drain.log
 task-list --all
 python3 -m json.tool ~/.taskloop/runs/<run_id>.json   # phase progress
 
-# Or let the hook do it: with hooks installed, typing a clear build ask
-# into any Claude Code session auto-queues it.
+# Or let the hook do it: in a repository where you ran
+# `install_hooks.py --project`, typing a clear build ask auto-queues it.
 ```
 
 Standalone taste (no queue required):
