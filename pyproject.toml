@@ -1,7 +1,8 @@
 [project]
 name = "claude-workflow-kit"
 version = "0.3.0"
-description = "Autonomous task queue, hooks, agent fleet, and memory/context MCP servers for Claude Code"
+description = "Autonomous engineering loop for Claude Code: file-backed task queue, chunked fresh-context workers, self-feeding hooks, tiered agent fleet, script toolbox, token and noise-floor measurement, memory/context MCP servers"
+keywords = ["claude-code", "claude", "autonomous-agents", "ai-agents", "task-queue", "hooks", "mcp", "context-engineering", "token-optimization", "developer-tools", "automation"]
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

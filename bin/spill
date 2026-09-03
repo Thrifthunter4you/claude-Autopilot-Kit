@@ -141,8 +141,10 @@ def cmd_show(args) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Run commands with bounded output: full text to a spill "
-                    "file, head+tail to the conversation.")
+        description="Run noisy commands (tests, builds, logs) without flooding the "
+                    "context window: full output goes to a spill file, only head+tail "
+                    "reach the conversation, exit code passes through; drill in later "
+                    "with `spill show --grep`.")
     sub = ap.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("run", help="run a command; preview + spill file")

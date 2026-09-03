@@ -201,8 +201,10 @@ def report(a: dict, top: int) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Rank a Claude Code session's token carriers by carry "
-                    "cost (size x turns remaining).")
+        description="Find out where a long Claude Code session actually spends "
+                    "tokens: ranks every tool result and file read by carry cost "
+                    "(size x turns it stays in the window) so you cut the top "
+                    "carrier, not tidy the bottom.")
     ap.add_argument("transcript", nargs="?",
                     help="path to a session .jsonl (default: newest for "
                          "--project / the CWD)")

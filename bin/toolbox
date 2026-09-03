@@ -175,8 +175,10 @@ def cmd_stats(_args) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Registry of reusable scripts: register once, then "
-                    "find/describe/run by name. Every run is telemetered.")
+        description="Turn one-off scripts into a searchable toolbox: register once, "
+                    "then find by intent, describe, and run by name — every run "
+                    "telemetered, so re-deriving a command by hand becomes the "
+                    "exception (the PreToolUse hook nudges toward the registered tool).")
     sub = ap.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("add", help="register a script or playbook")

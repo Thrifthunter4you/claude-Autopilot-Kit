@@ -24,8 +24,9 @@ from taskloop import config, manifest
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Read/write chunked-run state (the run manifest) "
-                    "for task-loop workers.")
+        description="Read/write the run manifest — the on-disk checkpoint that lets a "
+                    "multi-hour job resume in a FRESH context window after every "
+                    "phase or task, with nothing redone.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("get")

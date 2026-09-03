@@ -1,10 +1,13 @@
 # Claude Autopilot Kit
 
-The **Claude Autopilot Kit** (package name `claude-workflow-kit`) turns
-[Claude Code](https://claude.com/claude-code) into an unattended
-engineering loop: queue a one-line goal and it gets researched, designed,
-planned, executed, and reported — one clean context window per phase,
-every step on disk. It is six pieces that compose: a file-backed **task
+**Autonomous engineering loop for Claude Code.** The **Claude Autopilot
+Kit** (package name `claude-workflow-kit`) turns
+[Claude Code](https://claude.com/claude-code) into an unattended,
+self-feeding development loop: queue a one-line goal and it gets
+researched, designed, planned, executed, tested, and reported — one clean
+context window per phase, every step on disk, no database, no framework.
+Built for people who run coding agents for hours and want them cheaper,
+safer, and resumable. It is six pieces that compose: a file-backed **task
 loop**, **hooks** that make sessions queue their own work, a tiered
 **agent fleet**, a **script toolbox** that turns repeated operations into
 registered tools, **token tooling** that shows where long sessions

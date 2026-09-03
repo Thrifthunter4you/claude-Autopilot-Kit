@@ -169,8 +169,10 @@ def render(rep: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Grade a metric delta against the empirical rerun noise "
-                    "floor of its baseline command.")
+        description="Is that improvement real or just rerun jitter? Reruns the baseline "
+                    "N times, derives the minimum detectable effect, and grades a "
+                    "delta SHIP / INSIDE-NOISE-FLOOR / DONT-SHIP (exit 3) so scripts "
+                    "can gate on it.")
     ap.add_argument("--baseline", required=True, metavar="CMD",
                     help="shell command printing the baseline metric")
     g = ap.add_mutually_exclusive_group(required=True)

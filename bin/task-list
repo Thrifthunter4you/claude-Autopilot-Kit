@@ -18,8 +18,8 @@ from taskloop.handoff import Handoff
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Show the task queue: a summary line plus runnable "
-                    "tasks (--all for every status).")
+        description="See the autonomous task queue at a glance: what will run next, "
+                    "what is running, what is parked and why (--all for every status).")
     ap.add_argument("--all", action="store_true",
                     help="show every managed task, grouped by status")
     args = ap.parse_args(argv)

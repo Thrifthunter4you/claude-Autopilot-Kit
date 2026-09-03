@@ -149,7 +149,9 @@ def make_handoff(goal, repo, klass, priority, hint, today, active_dir,
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Queue a goal for the task loop.")
+    ap = argparse.ArgumentParser(description="Queue a one-line goal for the autonomous task loop: writes a "
+                    "runnable task file (deduped three ways) that a fresh-context "
+                    "Claude Code worker will research, plan, build and report.")
     ap.add_argument("goal", help="one-line goal a worker will pursue")
     ap.add_argument("--repo", default=config.DEFAULT_REPO,
                     help="repository the worker runs in (required unless "
