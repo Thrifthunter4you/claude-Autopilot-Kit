@@ -30,7 +30,8 @@ verdict (schema-validated CLI output, not transcript text):
 
 **Contents:** [What's in the box](#whats-in-the-box) ·
 [Why this exists](#why-this-exists) · [Install](#install) ·
-[Try it](#try-it) · [Meet the new pieces](#meet-the-new-pieces) ·
+[Try it](#try-it) · [What's new in 0.3](#whats-new-in-03) ·
+[Meet the new pieces](#meet-the-new-pieces) ·
 [The ideas that matter](#the-ideas-that-matter) ·
 [Safety](#safety) · [License](#license)
 
@@ -60,12 +61,13 @@ verdict (schema-validated CLI output, not transcript text):
   can declare a `territory` regex the PreToolUse hook defends. Example
   registry: [`toolbox.example.yaml`](toolbox.example.yaml); full
   walkthrough: [Meet the new pieces](#meet-the-new-pieces).
-- **Token tooling** ([`bin/token-audit`](bin/token-audit) +
-  [`bin/spill`](bin/spill) +
+- **Token + measurement tooling** ([`bin/token-audit`](bin/token-audit) +
+  [`bin/spill`](bin/spill) + [`bin/noise-floor`](bin/noise-floor) +
   [`docs/token-economy.md`](docs/token-economy.md)) — rank a session's
   token carriers by carry cost (size × turns remaining), keep bulk
-  command output out of the context window, and the working model of why
-  cache *writes*, not reads, are the bill. Sample reports:
+  command output out of the context window, grade a claimed improvement
+  against the rerun noise floor, and the working model of why cache
+  *writes*, not reads, are the bill. Sample reports:
   [Meet the new pieces](#meet-the-new-pieces).
 - [**`agents/`**](agents/AGENT_DESIGN.md) — a tiered subagent fleet
   (finder/verifier/judge/critic/dedup/tester/fixer/synth/scout/
@@ -154,6 +156,9 @@ token-audit ~/.claude/projects/<project-slug>/<session>.jsonl
 # Run something noisy without pasting 500 lines into the conversation:
 spill run -- pytest -x -q          # preview + spill file + real exit code
 
+# Did the change beat the rerun noise floor, or just wiggle inside it?
+noise-floor --baseline "./bench.sh" --delta -0.8 --direction lower
+
 # Register a script once, find and run it by name forever:
 toolbox add --name db-health --description "quick db health check" \
             --cmd "python3 ~/scripts/db_health.py"
@@ -161,11 +166,32 @@ toolbox find "health"
 toolbox run db-health
 ```
 
+## What's new in 0.3
+
+A month of running the loop unattended, folded back in
+([CHANGELOG](CHANGELOG.md)):
+
+- **Verdicts you can't forge.** Workers return their verdict as
+  schema-validated CLI output (`--json-schema`), not a magic transcript
+  line that any file the worker read could supply.
+- **Hooks are a per-project opt-in.** `install_hooks.py --project <repo>`
+  arms them for that repository only; nothing fires machine-wide unless you
+  say `--global`.
+- **Two guard hooks.** No unbounded Reads of spill files; a warning when
+  the memory index outgrows what a session start can actually load.
+- **`noise-floor`.** Before believing "we cut it 4%", measure how far the
+  same command moves on rerun. Below.
+- **Worker knobs** for effort level and the print-mode background ceiling
+  that silently killed long workers at 600 s.
+- **[Harness gotchas](docs/harness-gotchas.md)** — eight non-obvious
+  failure modes of unattended Claude Code and what the kit does about each.
+
 ## Meet the new pieces
 
-Three additions ported from a production setup where Claude Code runs
-unattended for weeks: a script registry, a token profiler, and an output
-bounder. Each works standalone — none requires the task loop.
+Additions ported from a production setup where Claude Code runs unattended
+for weeks: a script registry, a token profiler, an output bounder, and (0.3)
+a noise-floor gate for measurements. Each works standalone — none requires
+the task loop.
 
 ### `toolbox` — stop re-deriving what you already built
 
@@ -277,6 +303,35 @@ shows recent spills, `spill show 1` previews the newest, and
 `spill show 1 --grep "ERROR|FAIL"` pulls exactly the failing lines (with
 two lines of context) into the conversation — so you drill into the 1% you
 need instead of carrying the 99% you don't.
+
+### `noise-floor` — is that delta real, or just the rerun jitter?
+
+Every "the change improved X" claim compares two numbers. Run the SAME
+command twice and the number moves — often by more than the improvement
+being claimed. `noise-floor` measures that movement and grades the delta
+against it, so a measurement inside the floor is reported as what it is: an
+underpowered design, not a small win.
+
+```bash
+noise-floor --baseline "./bench.sh" --candidate "./bench.sh --new" -n 5 --direction lower
+```
+
+```
+VERDICT: INSIDE-NOISE-FLOOR
+baseline  n=5 min=41.2 max=44.9 mean=43.1 spread=3.7 ci=[41.8, 44.3]
+candidate n=5 mean=42.4 diff_ci=[-2.9, 1.6]
+delta     -0.7 (measured; lower is better)
+MDE       2.25  [bootstrap_diff_ci_half_width]
+→ |delta| <= MDE: not a result at any confidence — rerun with a larger -n or a less noisy metric
+```
+
+The minimum detectable effect comes from the baseline's spread (a seeded
+bootstrap CI from five runs), and a delta you *measured* is graded against
+the two-arm floor, since it carries the candidate's noise too. Three
+verdicts, three exit codes — `DONT-SHIP` exits 3 so a script can gate on
+it. `--delta` grades a number you already have; `--regex` pulls the metric
+out of chatty output. The measure-then-cut loop in
+[docs/token-economy.md](docs/token-economy.md) ends with this step.
 
 ### `tier_policy.yaml` — the fleet's model tiers, drift-linted
 

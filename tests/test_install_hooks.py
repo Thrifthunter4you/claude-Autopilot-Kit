@@ -97,10 +97,10 @@ class TestGlobalMigration:
         legacy.write_text(json.dumps({"hooks": {
             "Stop": [FOREIGN, ih._entry(ih.KIT_HOOKS[3][2], "*")],
             "SessionStart": [ih._entry(ih.KIT_HOOKS[1][2], "*")]},
-            "model": "opus"}))
+            "theme": "light"}))
         assert ih.main(["--remove-global"]) == 0
         data = json.loads(legacy.read_text())
-        assert data["model"] == "opus"
+        assert data["theme"] == "light"
         assert data["hooks"] == {"Stop": [FOREIGN]}
         assert _kit_cmds(data) == []
 

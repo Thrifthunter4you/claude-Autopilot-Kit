@@ -1,6 +1,6 @@
 [project]
 name = "claude-workflow-kit"
-version = "0.1.0"
+version = "0.3.0"
 description = "Autonomous task queue, hooks, agent fleet, and memory/context MCP servers for Claude Code"
 readme = "README.md"
 license = { text = "MIT" }
