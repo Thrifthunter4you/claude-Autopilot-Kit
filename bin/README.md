@@ -14,5 +14,6 @@ touch the queue).
 | [`toolbox`](toolbox) | registry of reusable scripts — register once, then `find` / `describe` / `run` by name; every run telemetered ([why](../taskloop/toolbox.py)) |
 | [`token-audit`](token-audit) | rank a session transcript's token carriers by carry cost — what to cut, biggest first ([the math](../docs/token-economy.md)) |
 | [`spill`](spill) | run a command with bounded output: full text to a file, head+tail to the conversation, `show --grep` to drill in later |
+| [`noise-floor`](noise-floor) | grade a metric delta against the empirical rerun noise floor of its baseline command — SHIP / DONT-SHIP / INSIDE-NOISE-FLOOR with the minimum detectable effect and its rule named; exit 3 on DONT-SHIP so scripts can gate on it |
 
 All eight support `--help` without side effects.

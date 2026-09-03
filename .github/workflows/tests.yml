@@ -23,7 +23,7 @@ jobs:
       - name: CLI --help smoke (no side effects)
         run: |
           TMP="$(mktemp -d)"
-          for b in task-add task-list task-go drain-once run-manifest; do
+          for b in task-add task-list task-go drain-once run-manifest toolbox token-audit spill noise-floor; do
             TASKLOOP_HOME="$TMP" ./bin/$b --help > /dev/null
           done
           [ -z "$(ls -A "$TMP")" ] || { echo "--help created state"; exit 1; }

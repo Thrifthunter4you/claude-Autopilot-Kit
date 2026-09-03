@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Is a metric delta real, or just the noise floor? Rerun and find out.
+
+    noise-floor --baseline "pytest -q --durations=0 | tail -1" \\
+                --candidate "pytest -q --durations=0 | tail -1" -n 5 --direction lower
+    noise-floor --baseline "./bench.sh" --delta -0.8 --direction lower
+    noise-floor --baseline "./recall-rate.sh" --candidate "./recall-rate.sh --new" \\
+                --regex "recall=([0-9.]+)" --direction higher --json
+
+Every "we improved X by 3%" claim rests on a comparison of two numbers, and
+almost nobody checks how far the SAME command moves when you simply run it
+again. This tool measures that floor empirically and grades the delta
+against it:
+
+  1. Run --baseline N times (default 5, minimum 2 — one run has no spread).
+     Each run must print one number: the LAST number on the LAST non-empty
+     line of stdout, or capture group 1 of --regex.
+  2. The candidate delta is either GIVEN (--delta, a number you measured
+     elsewhere) or MEASURED (--candidate run N times; delta = mean(candidate)
+     - mean(baseline)).
+  3. The minimum detectable effect (MDE) — reported with its rule name:
+       given delta,    N < 5   half the baseline spread            (max-min)/2
+       given delta,    N >= 5  half-width of a bootstrap CI of the baseline mean
+       measured delta, N < 5   half the POOLED spread of both arms
+       measured delta, N >= 5  half-width of a bootstrap CI of the DIFFERENCE
+                               of means (both arms resampled)
+     A measured delta carries the candidate arm's noise too; grading it
+     against the baseline alone flags far too many null changes as results.
+  4. Verdict:
+       |delta| <= MDE                      INSIDE-NOISE-FLOOR   exit 0
+       delta improves per --direction      SHIP                 exit 0
+       otherwise                           DONT-SHIP            exit 3
+     Exit 1 = usage, a command failed, or a run printed no number — a bad
+     sample is an error, never a silently dropped point.
+
+A delta under the MDE is not "a small win"; it is an underpowered
+measurement. Rerun with a larger -n, or make the metric less noisy, before
+believing it. The bootstrap is seeded (--seed) so a report is reproducible.
+Commands run through the shell (pipelines welcome); stderr passes through.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import re
+import statistics
+import subprocess
+import sys
+
+NUMBER = re.compile(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?")
+CI_MIN_N = 5
+
+
+class SampleError(Exception):
+    pass
+
+
+def extract(stdout: str, regex: str | None) -> float:
+    if regex:
+        m = re.search(regex, stdout)
+        if not m:
+            raise SampleError(f"--regex {regex!r} matched nothing")
+        token = m.group(1) if m.groups() else m.group(0)
+        nums = NUMBER.findall(token)
+        if not nums:
+            raise SampleError(f"--regex match {token!r} holds no number")
+        return float(nums[-1])
+    for line in reversed(stdout.splitlines()):
+        if line.strip():
+            nums = NUMBER.findall(line)
+            if not nums:
+                raise SampleError(f"last line has no number: {line.strip()!r}")
+            return float(nums[-1])
+    raise SampleError("command printed nothing")
+
+
+def sample(cmd: str, n: int, regex: str | None, label: str) -> list:
+    values = []
+    for i in range(n):
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        sys.stderr.write(proc.stderr)
+        if proc.returncode != 0:
+            raise SampleError(f"{label} run {i + 1}/{n} exited "
+                              f"{proc.returncode}: {cmd}")
+        try:
+            values.append(extract(proc.stdout, regex))
+        except SampleError as exc:
+            raise SampleError(f"{label} run {i + 1}/{n}: {exc}") from None
+    return values
+
+
+def bootstrap_ci(values: list, rng: random.Random, resamples: int,
+                 confidence: float, other: list | None = None) -> tuple:
+    """Percentile bootstrap CI of the mean (or of mean(values)-mean(other))."""
+    stats = []
+    for _ in range(resamples):
+        a = statistics.fmean(rng.choices(values, k=len(values)))
+        if other is not None:
+            a -= statistics.fmean(rng.choices(other, k=len(other)))
+        stats.append(a)
+    stats.sort()
+    lo = stats[int((1 - confidence) / 2 * (resamples - 1))]
+    hi = stats[int((1 + confidence) / 2 * (resamples - 1))]
+    return lo, hi
+
+
+def grade(baseline: list, candidate: list | None, given: float | None,
+          direction: str, seed: int, resamples: int, confidence: float) -> dict:
+    n = len(baseline)
+    rng = random.Random(seed)
+    b_mean = statistics.fmean(baseline)
+    b_spread = max(baseline) - min(baseline)
+    rep = {"n": n, "direction": direction,
+           "baseline": {"values": baseline, "mean": b_mean,
+                        "min": min(baseline), "max": max(baseline),
+                        "spread": b_spread}}
+    if candidate is None:
+        delta, source = float(given), "given"
+        if n >= CI_MIN_N:
+            lo, hi = bootstrap_ci(baseline, rng, resamples, confidence)
+            rep["baseline"]["ci"] = [lo, hi]
+            mde, rule = (hi - lo) / 2, "bootstrap_ci_half_width"
+        else:
+            mde, rule = b_spread / 2, "half_baseline_spread"
+        rep["candidate"] = {"delta": delta, "source": source}
+    else:
+        c_mean = statistics.fmean(candidate)
+        delta, source = c_mean - b_mean, "measured"
+        rep["candidate"] = {"values": candidate, "mean": c_mean,
+                            "delta": delta, "source": source}
+        if n >= CI_MIN_N:
+            lo, hi = bootstrap_ci(candidate, rng, resamples, confidence,
+                                  other=baseline)
+            rep["candidate"]["diff_ci"] = [lo, hi]
+            mde, rule = (hi - lo) / 2, "bootstrap_diff_ci_half_width"
+        else:
+            pooled = max(baseline + candidate) - min(baseline + candidate)
+            mde, rule = pooled / 2, "half_pooled_spread"
+    rep["mde"], rep["mde_rule"] = mde, rule
+    if abs(delta) <= mde:
+        verdict, code = "INSIDE-NOISE-FLOOR", 0
+    elif (delta > 0) == (direction == "higher"):
+        verdict, code = "SHIP", 0
+    else:
+        verdict, code = "DONT-SHIP", 3
+    rep["verdict"], rep["exit_code"] = verdict, code
+    return rep
+
+
+def render(rep: dict) -> str:
+    b, c = rep["baseline"], rep["candidate"]
+    lines = [f"VERDICT: {rep['verdict']}",
+             f"baseline  n={rep['n']} min={b['min']:g} max={b['max']:g} "
+             f"mean={b['mean']:g} spread={b['spread']:g}"
+             + (f" ci=[{b['ci'][0]:g}, {b['ci'][1]:g}]" if "ci" in b else "")]
+    if c["source"] == "measured":
+        lines.append(f"candidate n={rep['n']} mean={c['mean']:g}"
+                     + (f" diff_ci=[{c['diff_ci'][0]:g}, {c['diff_ci'][1]:g}]"
+                        if "diff_ci" in c else ""))
+    lines.append(f"delta     {c['delta']:+g} ({c['source']}; "
+                 f"{rep['direction']} is better)")
+    lines.append(f"MDE       {rep['mde']:g}  [{rep['mde_rule']}]")
+    if rep["verdict"] == "INSIDE-NOISE-FLOOR":
+        lines.append("→ |delta| <= MDE: not a result at any confidence — "
+                     "rerun with a larger -n or a less noisy metric")
+    return "\n".join(lines)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Grade a metric delta against the empirical rerun noise "
+                    "floor of its baseline command.")
+    ap.add_argument("--baseline", required=True, metavar="CMD",
+                    help="shell command printing the baseline metric")
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--candidate", metavar="CMD",
+                   help="shell command printing the candidate metric")
+    g.add_argument("--delta", type=float,
+                   help="a delta you already measured (candidate - baseline)")
+    ap.add_argument("-n", type=int, default=5, help="runs per arm (min 2)")
+    ap.add_argument("--direction", choices=["higher", "lower"],
+                    default="higher", help="which way is better")
+    ap.add_argument("--regex", help="regex whose group 1 (or whole match) "
+                                    "holds the metric")
+    ap.add_argument("--seed", type=int, default=1729)
+    ap.add_argument("--resamples", type=int, default=2000)
+    ap.add_argument("--confidence", type=float, default=0.95)
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+    if args.n < 2:
+        ap.error("-n must be >= 2 (a single run has no spread)")
+    try:
+        baseline = sample(args.baseline, args.n, args.regex, "baseline")
+        candidate = (sample(args.candidate, args.n, args.regex, "candidate")
+                     if args.candidate else None)
+    except SampleError as exc:
+        print(f"noise-floor: {exc}", file=sys.stderr)
+        return 1
+    rep = grade(baseline, candidate, args.delta, args.direction, args.seed,
+                args.resamples, args.confidence)
+    print(json.dumps(rep, indent=2) if args.json else render(rep))
+    return rep["exit_code"]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

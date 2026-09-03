@@ -114,3 +114,34 @@ measurement does. The loop we recommend:
 Cutting from the top of the ranked list beats any amount of general
 tidiness, and the audit keeps you honest about whether a change actually
 moved the bill.
+
+## Believe a delta only after it clears the noise floor
+
+Every "the change cut spend 4%" claim compares two numbers, and almost
+nobody measures how far the SAME command moves when you simply run it
+again. Reruns of a token audit, a benchmark, or a recall rate routinely
+differ by more than the effect being claimed — so a single before/after pair
+proves nothing either way.
+
+[`noise-floor`](../bin/noise-floor) measures that floor empirically: it
+reruns the baseline command N times, derives the minimum detectable effect
+(MDE) from the spread (a seeded bootstrap CI from N ≥ 5), and grades the
+delta — given, or measured by rerunning the candidate — against it:
+
+```bash
+noise-floor --baseline "token-audit last.jsonl | tail -1" \
+            --candidate "token-audit new.jsonl | tail -1" -n 5 --direction lower
+# VERDICT: INSIDE-NOISE-FLOOR
+# baseline  n=5 min=41.2 max=44.9 mean=43.1 spread=3.7 ci=[41.8, 44.3]
+# candidate n=5 mean=42.4 diff_ci=[-2.9, 1.6]
+# delta     -0.7 (measured; lower is better)
+# MDE       2.25  [bootstrap_diff_ci_half_width]
+# → |delta| <= MDE: not a result at any confidence — rerun with a larger -n or a less noisy metric
+```
+
+Three verdicts, three exit codes: `SHIP` (0), `INSIDE-NOISE-FLOOR` (0 — not
+a loss, an underpowered measurement), `DONT-SHIP` (3, so a script can gate
+on it). The rule that produced the MDE is always named, because a delta
+measured from two noisy arms needs a wider floor than one you were handed.
+Run it before recording any "measure-after" number in memory; a number
+inside the floor is the kind of memory that later lies.
