@@ -11,7 +11,7 @@
 - [token-economy.md](token-economy.md) — where long sessions actually
   spend tokens (carry cost, cache writes), and the kit's countermeasures:
   `token-audit`, `spill`, the tier policy, and the toolbox.
-- [harness-gotchas.md](harness-gotchas.md) — ten non-obvious failure
+- [harness-gotchas.md](harness-gotchas.md) — twelve non-obvious failure
   modes of unattended Claude Code (print-mode background ceiling, hook
   snapshotting, forgeable transcript protocols, index truncation, ...) and
   what the kit does about each.

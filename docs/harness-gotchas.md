@@ -121,3 +121,29 @@ from the parent file and every subagent looks like the main loop.
 - **Kit:** `pretool_subagent_turn_budget.py` resolves the subagent's own
   file and counts there; with no file it falls back to counting its own
   calls, an over-count it never uses to deny.
+
+## 11. A PreCompact `hookSpecificOutput` is rejected — and takes the whole output with it
+
+Other events accept `{"hookSpecificOutput": {"hookEventName": …,
+"additionalContext": …}}`. PreCompact does not: `"PreCompact"` is not an
+allowed `hookEventName`, the output fails schema validation, and nothing the
+hook printed reaches the summarizer. With auto-compaction the failure is
+invisible; only a manual `/compact` shows the validation error. Plain text
+on stdout (exit 0) does reach the summarizer as extra instructions.
+
+- **Symptom:** compaction summaries that never mention what your PreCompact
+  hook asked them to keep.
+- **Kit:** `precompact_ledger.py` prints its directive as plain text; a test
+  pins that the output is not a JSON object.
+
+## 12. A hook fire is not a compaction
+
+PreCompact fires before the compaction runs, and a compaction can fail after
+it fires. Counting fires to decide "this is the second compaction" escalates
+sessions that compacted once. What landed is in the transcript: each
+successful compaction appends `{"type": "system", "subtype":
+"compact_boundary", "compactMetadata": {"trigger": …, "preTokens": …}}`.
+Subagent compactions fire the same hook, with an `agent_id`.
+
+- **Kit:** `precompact_ledger.py` numbers a compaction as boundaries + 1,
+  read from the transcript being compacted, and never escalates a subagent.

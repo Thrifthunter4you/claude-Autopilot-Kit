@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0 — 2026-10
+
+Long sessions: survive compaction, and know when to stop.
+
+- **`precompact_ledger.py`** (PreCompact): writes a continuity ledger to
+  `~/.taskloop/ledgers/` before every compaction — recent user messages,
+  files edited and read, landed commits (hash + branch, parsed from
+  `git commit` output), tool errors since the previous compaction, git
+  status — and prints a plain-text directive the summarizer follows (keep
+  in-flight edits, next steps, owed checks, commit hashes, decisions; name
+  the ledger). The compaction number comes from the transcript's
+  `compact_boundary` records, never from hook fires; from #2
+  (`TASKLOOP_COMPACT_ESCALATE_AT`) the directive adds a wrap-up clause.
+  Subagent compactions never escalate and never move the session pointer.
+  Ledgers older than 30 days are pruned. Verified end-to-end against
+  Claude Code 2.1.310 (both summaries named the ledger; the second carried
+  the wrap-up into its next step).
+- **`pretool_context_ceiling.py`** (PreToolUse, working tools): reads the
+  newest model call's context size from the transcript tail and, at or
+  over the ceiling (default 150K, `TASKLOOP_CONTEXT_CEILING_K`), injects a
+  wrap-up reminder. Never blocks; main loop only; silent on the wrap-up
+  calls (`task-add`/`task-go`, writes under `handoffs/`); one reminder per
+  cooldown, serialized across a parallel batch.
+- **`session_start_context.py`** points the session at the ledger after a
+  compaction, or a new session at one written in the same directory within
+  the hour.
+- **Docs:** harness gotchas 11 (a PreCompact `hookSpecificOutput` fails the
+  output schema and is dropped whole) and 12 (a hook fire is not a
+  compaction); README "What's new in 0.5"; a context-ceiling line in the
+  CLAUDE.md template.
+- Test suite: 137 → 160.
+
 ## 0.4.0 — 2026-10
 
 Context economy, enforced by hooks instead of habit.

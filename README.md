@@ -33,8 +33,8 @@ verdict (schema-validated CLI output, not transcript text):
 
 **Contents:** [What's in the box](#whats-in-the-box) ·
 [Why this exists](#why-this-exists) · [Install](#install) ·
-[Try it](#try-it) · [What's new in 0.4](#whats-new-in-04) ·
-[0.3](#whats-new-in-03) ·
+[Try it](#try-it) · [What's new in 0.5](#whats-new-in-05) ·
+[0.4](#whats-new-in-04) · [0.3](#whats-new-in-03) ·
 [Meet the new pieces](#meet-the-new-pieces) ·
 [The ideas that matter](#the-ideas-that-matter) ·
 [Safety](#safety) · [License](#license)
@@ -55,8 +55,9 @@ verdict (schema-validated CLI output, not transcript text):
   crystallize nudges (hand-derived it 3×? the loop builds you a script),
   a territory nudge that steers sessions to registered tools instead of
   hand-derived commands, session-start state briefing, automatic
-  spilling of oversized tool output, and a turn-budget reminder for
-  subagents that run long. A per-project
+  spilling of oversized tool output, a turn-budget reminder for
+  subagents that run long, a context-ceiling wrap-up reminder, and a
+  continuity ledger written before every compaction. A per-project
   opt-in: [`hooks/install_hooks.py --project <repo>`](hooks/install_hooks.py)
   writes `<repo>/.claude/settings.local.json`, so nothing fires in
   sessions outside the repositories you enabled.
@@ -176,6 +177,26 @@ toolbox add --name db-health --description "quick db health check" \
 toolbox find "health"
 toolbox run db-health
 ```
+
+## What's new in 0.5
+
+Long sessions: survive compaction, and know when to stop
+([CHANGELOG](CHANGELOG.md)):
+
+- **A ledger before every compaction.** A PreCompact hook writes what the
+  summary tends to drop — recent user messages, files edited, commits with
+  their hashes, tool errors, git status — to `~/.taskloop/ledgers/`, and
+  tells the summarizer what it must keep and where the ledger is. The next
+  session start points at it.
+- **Second compaction = wrap up.** Counted from the compactions that
+  actually landed in the transcript, not from hook fires; the summary then
+  carries "finish the edit in flight, commit, hand off" forward.
+- **A context ceiling.** Past 150K tokens of context (configurable), every
+  tool call in the main session gets a reminder, on a cooldown, to finish
+  what is in flight, write a handoff and end the turn. Never blocks.
+- **Two more [harness gotchas](docs/harness-gotchas.md)**: the PreCompact
+  output shape the harness silently rejects, and why a hook fire is not a
+  compaction.
 
 ## What's new in 0.4
 

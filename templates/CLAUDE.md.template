@@ -38,6 +38,11 @@
   improvement, a hygiene/cleanup item, or a reusable-script candidate each
   becomes its own queue item with `--hint "[followon] ..."`. Zero follow-ons
   is a fine outcome; only file work you verified is actually missing.
+- **Wrap up when the context says so.** When a hook reports the context is
+  over its ceiling, or the session is on its second compaction: finish only
+  the edit or test in flight, commit, write a handoff (`task-add` with a
+  concrete goal, or a note under `memory/handoffs/active/` naming the exact
+  next step) and end the turn. A fresh session resumes it cheaper.
 - **Leave the tree green.** If you hit a failing test or broken build — even
   one you didn't cause — fix it before you stop. A failure at committed HEAD
   is yours the moment it blocks your work.
