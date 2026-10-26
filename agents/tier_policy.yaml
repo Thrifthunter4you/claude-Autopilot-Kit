@@ -4,7 +4,7 @@
 # Why this file exists: tier assignments drift. Someone bumps one agent "just
 # for this run", a copy-paste mints a new leaf on the wrong tier, and six
 # weeks later your cheap sweep fleet is quietly running on your most
-# expensive model (or worse — your money-path judge is running on the
+# expensive model (or worse — your highest-stakes judge is running on the
 # cheapest). A policy file nobody checks is just a wish, so
 # tests/test_tier_policy.py RECONCILES this file against every agents/*.md
 # frontmatter on every test run: any divergence fails the suite.

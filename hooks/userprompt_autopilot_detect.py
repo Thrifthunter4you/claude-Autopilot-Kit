@@ -34,7 +34,7 @@ _NOISE_MARKERS = (
     "<task-notification>", "<tool-use-id>", "<command-name>", "<command-message>",
     "<local-command", "<system-reminder", "</command", "</task", "<function_results",
     # task-loop worker + automation markers (recursion guard):
-    "autonomous task-loop worker", "autonomous session-loop worker",
+    "autonomous task-loop worker",
     "invoke the `autopilot` skill", "loop_result:", "<autopilot-detect",
 )
 # Session bootstrap / handoff prompts carry build language as CONTEXT, not as
