@@ -34,13 +34,20 @@ KIT = Path(__file__).resolve().parents[1]
 
 # (event, tool matcher, command) — order preserved on install.  A matcher
 # narrows the tools an event fires for: the toolbox nudge only ever inspects
-# shell commands, so it is not invoked for Read/Edit/etc.
+# shell commands, so it is not invoked for Read/Edit/etc.  The turn-budget
+# hook names the working tools rather than "*": it reads its count from the
+# subagent's transcript, so it need not see every call, and the answer tool
+# (StructuredOutput) is never matched, so a ceiling can never block it.
+WORK_TOOLS = ("Bash|Read|Grep|Glob|Edit|Write|MultiEdit|NotebookEdit|"
+              "WebFetch|WebSearch|mcp__.*")
 KIT_HOOKS = [
     ("UserPromptSubmit", "*", f"python3 {KIT}/hooks/userprompt_autopilot_detect.py"),
     ("SessionStart", "*", f"python3 {KIT}/hooks/session_start_context.py"),
     ("PreToolUse", "Bash", f"python3 {KIT}/hooks/pretool_toolbox_nudge.py"),
     ("PreToolUse", "Read", f"python3 {KIT}/hooks/pretool_spill_read_guard.py"),
+    ("PreToolUse", WORK_TOOLS, f"python3 {KIT}/hooks/pretool_subagent_turn_budget.py"),
     ("PostToolUse", "Write|Edit|MultiEdit", f"python3 {KIT}/hooks/posttool_memory_budget.py"),
+    ("PostToolUse", "Bash|mcp__.*", f"python3 {KIT}/hooks/posttool_output_spill.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_queue_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_crystallize_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_telemetry_nudge.py"),
