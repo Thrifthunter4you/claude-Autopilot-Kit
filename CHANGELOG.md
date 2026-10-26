@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 — 2026-10
+
+- **Docs:** harness gotcha 11 corrected. It said every event except
+  PreCompact accepts `hookSpecificOutput`; on Claude Code 2.1.310 eleven
+  events reject it (PreCompact, PostCompact, SessionEnd, StopFailure,
+  TeammateIdle, TaskCreated, TaskCompleted, ConfigChange, WorktreeRemove,
+  InstructionsLoaded, DirectoryAdded). The gotcha now lists them and notes
+  that the rejection is silent except on a manual `/compact`:
+  auto-compaction, SessionEnd, TaskCreated and TaskCompleted failures
+  appear only in a `--debug-file` log.
+  No hook changes: the kit's only hook on those events,
+  `precompact_ledger.py`, already prints plain text.
+
 ## 0.5.0 — 2026-10
 
 Long sessions: survive compaction, and know when to stop.

@@ -122,17 +122,26 @@ from the parent file and every subagent looks like the main loop.
   file and counts there; with no file it falls back to counting its own
   calls, an over-count it never uses to deny.
 
-## 11. A PreCompact `hookSpecificOutput` is rejected — and takes the whole output with it
+## 11. `hookSpecificOutput` only exists for some events — elsewhere it sinks the whole output
 
-Other events accept `{"hookSpecificOutput": {"hookEventName": …,
-"additionalContext": …}}`. PreCompact does not: `"PreCompact"` is not an
-allowed `hookEventName`, the output fails schema validation, and nothing the
-hook printed reaches the summarizer. With auto-compaction the failure is
-invisible; only a manual `/compact` shows the validation error. Plain text
-on stdout (exit 0) does reach the summarizer as extra instructions.
+`hookSpecificOutput` is a union keyed on `hookEventName`, and the output
+schema bundled with the Claude Code 2.1.310 CLI has no member for eleven
+events: PreCompact, PostCompact, SessionEnd, StopFailure, TeammateIdle,
+TaskCreated, TaskCompleted, ConfigChange, WorktreeRemove,
+InstructionsLoaded and DirectoryAdded. A hook on one of them that prints
+`{"hookSpecificOutput": {"hookEventName": …}}` fails validation as a whole
+JSON object, so every other field it printed is lost with it. On PreCompact
+nothing reaches the summarizer; plain text on stdout (exit 0) is not
+validated and does reach it as extra instructions.
 
 - **Symptom:** compaction summaries that never mention what your PreCompact
-  hook asked them to keep.
+  hook asked them to keep; a SessionEnd, TaskCreated or TaskCompleted hook
+  whose output has no visible effect.
+- **Check:** only a manual `/compact` prints the validation error.
+  Auto-compaction, SessionEnd, TaskCreated and TaskCompleted failures
+  appear only in a `--debug-file` log; assume the other events are silent
+  too. The union can change between CLI releases, so after an upgrade fire
+  each event you hook once with `--debug-file <log>` and look for the error.
 - **Kit:** `precompact_ledger.py` prints its directive as plain text; a test
   pins that the output is not a JSON object.
 

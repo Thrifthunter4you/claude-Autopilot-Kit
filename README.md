@@ -194,9 +194,9 @@ Long sessions: survive compaction, and know when to stop
 - **A context ceiling.** Past 150K tokens of context (configurable), every
   tool call in the main session gets a reminder, on a cooldown, to finish
   what is in flight, write a handoff and end the turn. Never blocks.
-- **Two more [harness gotchas](docs/harness-gotchas.md)**: the PreCompact
-  output shape the harness silently rejects, and why a hook fire is not a
-  compaction.
+- **Two more [harness gotchas](docs/harness-gotchas.md)**: the hook output
+  shape the harness silently rejects on PreCompact and ten other events, and
+  why a hook fire is not a compaction.
 
 ## What's new in 0.4
 
