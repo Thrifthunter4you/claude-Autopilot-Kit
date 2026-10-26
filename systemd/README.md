@@ -30,18 +30,24 @@ competes with your interactive apps.
 The units had different names before 0.6.0. An existing install keeps
 working after a pull, because systemd runs the copies in
 `~/.config/systemd/user/`; only commands and scripts that name the units
-need the new names. To switch, remove the old pair before enabling the new
-one. If both timers stay enabled, the drainer gets two wake-ups (the second
-start just prints "busy"):
+need the new names. The unit contents did not change, so switching is a
+rename of your installed copies, which keeps any `ExecStart` or `[Timer]`
+edits you made. Find the old service first: it is the one that runs the
+drainer, and its timer has the same base name (no output = nothing to
+upgrade):
 
 ```bash
-# The old service is the one that runs the drainer; its timer has the same base name
-grep -l drain-once ~/.config/systemd/user/*.service
+grep -l drain-once ~/.config/systemd/user/*.service | grep -v '/taskloop\.service$'
+```
+
+Then swap them. If both timers stay enabled, the drainer gets two wake-ups
+and the second one exits as busy:
+
+```bash
 OLD=old-unit-name    # replace with the base name printed above, without .service
 systemctl --user disable --now "$OLD.timer"
-rm ~/.config/systemd/user/"$OLD".service ~/.config/systemd/user/"$OLD".timer
-cp taskloop.service taskloop.timer ~/.config/systemd/user/
-# Re-apply any ExecStart or [Timer] edits you had made to the old files
+mv ~/.config/systemd/user/"$OLD".service ~/.config/systemd/user/taskloop.service
+mv ~/.config/systemd/user/"$OLD".timer ~/.config/systemd/user/taskloop.timer
 systemctl --user daemon-reload
 systemctl --user enable --now taskloop.timer
 ```
