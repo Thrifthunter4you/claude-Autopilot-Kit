@@ -22,6 +22,12 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hook_log
+except Exception:  # pragma: no cover - logging is optional
+    hook_log = None
+
 HOME = Path(os.environ.get("TASKLOOP_HOME", Path.home() / ".taskloop"))
 SPILL_DIR = HOME / "spills"
 SMALL_BYTES = int(os.environ.get("TASKLOOP_SPILL_GUARD_SMALL_BYTES", "4096"))
@@ -61,6 +67,11 @@ def main():
     if decide(tool_input) != "deny":
         sys.exit(0)
     path = tool_input.get("file_path")
+    if hook_log is not None:
+        hook_log.record("PreToolUse", "spill_read_guard", "deny",
+                        session=str(payload.get("session_id") or ""),
+                        tool="Read", reason=str(path),
+                        agent=str(payload.get("agent_id") or ""))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",

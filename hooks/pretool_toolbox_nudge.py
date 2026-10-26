@@ -45,6 +45,11 @@ from pathlib import Path
 
 KIT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(KIT))
+sys.path.insert(0, str(KIT / "hooks"))
+try:
+    import hook_log
+except Exception:  # pragma: no cover - logging is optional
+    hook_log = None
 
 HOME = Path(os.environ.get("TASKLOOP_HOME", Path.home() / ".taskloop"))
 LEDGER = HOME / "toolbox_nudges.jsonl"
@@ -137,6 +142,10 @@ def main():
 
     if enforced and os.environ.get("TOOLBOX_NUDGE_ENFORCE_DISABLE") != "1":
         _log(session, name, "deny", command)
+        if hook_log is not None:
+            hook_log.record("PreToolUse", "toolbox_nudge", "deny",
+                            session=session, tool="Bash", reason=name,
+                            agent=str(payload.get("agent_id") or ""))
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
@@ -152,6 +161,10 @@ def main():
     if _already_nudged(session, name):
         sys.exit(0)
     _log(session, name, "advisory", command)
+    if hook_log is not None:
+        hook_log.record("PreToolUse", "toolbox_nudge", "advise",
+                        session=session, tool="Bash", reason=name,
+                        agent=str(payload.get("agent_id") or ""))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "additionalContext": (

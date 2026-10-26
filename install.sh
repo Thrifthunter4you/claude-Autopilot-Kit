@@ -30,7 +30,7 @@ mkdir -p "$STATE_HOME"/{queue/{active,done,superseded},runs,logs,memory}
 
 # 2. Bin symlinks
 mkdir -p "$BIN_DIR"
-for b in task-add task-list task-go drain-once run-manifest toolbox token-audit spill noise-floor; do
+for b in task-add task-list task-go drain-once run-manifest toolbox token-audit spill noise-floor hook-cost; do
   ln -sf "$KIT/bin/$b" "$BIN_DIR/$b"
 done
 echo "symlinked bins into $BIN_DIR (ensure it is on PATH)"

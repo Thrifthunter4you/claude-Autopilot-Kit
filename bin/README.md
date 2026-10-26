@@ -1,7 +1,7 @@
 # CLIs
 
-Eight commands, symlinked onto your PATH by `install.sh`. The first five
-run the task loop; the last three are standalone (useful even if you never
+Ten commands, symlinked onto your PATH by `install.sh`. The first five
+run the task loop; the other five are standalone (useful even if you never
 touch the queue).
 
 | Command | Job |
@@ -15,5 +15,6 @@ touch the queue).
 | [`token-audit`](token-audit) | rank a session transcript's token carriers by carry cost — what to cut, biggest first ([the math](../docs/token-economy.md)) |
 | [`spill`](spill) | run a command with bounded output: full text to a file, head+tail to the conversation, `show --grep` to drill in later |
 | [`noise-floor`](noise-floor) | grade a metric delta against the empirical rerun noise floor of its baseline command — SHIP / DONT-SHIP / INSIDE-NOISE-FLOOR with the minimum detectable effect and its rule named; exit 3 on DONT-SHIP so scripts can gate on it |
+| [`hook-cost`](hook-cost) | read the hook decision log: denies / reminders / rewrites per hook and per session, bytes the output spill kept out of context, subagents that ran past their turn budget |
 
-All eight support `--help` without side effects.
+All ten support `--help` without side effects.

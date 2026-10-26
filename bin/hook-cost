@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""What are your hooks costing (and saving)? Read the hook decision log.
+
+    hook-cost                      # every recorded decision, grouped by hook
+    hook-cost --since 24           # last 24 hours only
+    hook-cost --session 3f2a       # one session (any id prefix)
+    hook-cost --json               # machine-readable rows
+
+Every kit hook that denies, advises or rewrites appends one row to
+~/.taskloop/hook_decisions.jsonl (see hooks/hook_log.py).  This report
+turns that into the numbers you need to decide whether a hook earns its
+place:
+
+  BY HOOK     count per hook x decision, how many sessions saw it, and the
+              mean per session that saw it.  A deny always costs at least
+              one extra model turn (read the reason, pick another route,
+              call again) — so "denies per session" is the floor on what a
+              guard costs.  If a guard fires a lot and the denied thing was
+              fine, loosen the guard; if it rarely fires, it is cheap
+              insurance.
+  SAVED       total bytes the output-spill rewrite kept out of context —
+              and since a tool result is re-read on every later turn (see
+              token-audit), the real saving is that x turns remaining.
+  SUBAGENTS   turn-budget reminders and denies per subagent: how many
+              subagents ran past their budget, and the worst offenders.
+
+Read-only; never creates the log.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+
+
+def log_path() -> Path:
+    explicit = os.environ.get("TASKLOOP_HOOK_LOG")
+    if explicit:
+        return Path(explicit)
+    home = Path(os.environ.get("TASKLOOP_HOME", Path.home() / ".taskloop"))
+    return home / "hook_decisions.jsonl"
+
+
+def load(path: Path, since_hours: float | None = None, session: str = "") -> list:
+    cutoff = time.time() - since_hours * 3600 if since_hours else None
+    rows = []
+    lines = []
+    for part in (path.with_name(path.name + ".1"), path):   # rotated first
+        try:
+            with part.open(encoding="utf-8") as f:
+                lines.extend(f)
+        except OSError:
+            continue
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if cutoff is not None and float(row.get("ts") or 0) < cutoff:
+            continue
+        if session and not str(row.get("session") or "").startswith(session):
+            continue
+        rows.append(row)
+    return rows
+
+
+def summarize(rows: list) -> dict:
+    counts = Counter()
+    sessions = defaultdict(set)
+    saved = 0
+    agents = defaultdict(lambda: {"advise": 0, "deny": 0, "last": ""})
+    for row in rows:
+        key = (str(row.get("hook") or "?"), str(row.get("decision") or "?"))
+        counts[key] += 1
+        sessions[key].add(str(row.get("session") or ""))
+        saved += int(row.get("saved_bytes") or 0)
+        if row.get("hook") == "subagent_turn_budget" and row.get("agent"):
+            a = agents[str(row["agent"])]
+            a[str(row.get("decision"))] = a.get(str(row.get("decision")), 0) + 1
+            a["last"] = str(row.get("reason") or "")
+    by_hook = [{"hook": h, "decision": d, "count": n,
+                "sessions": len(sessions[(h, d)]),
+                "per_session": round(n / max(len(sessions[(h, d)]), 1), 2)}
+               for (h, d), n in counts.most_common()]
+    worst = sorted(agents.items(), key=lambda kv: (-kv[1]["deny"], -kv[1]["advise"]))
+    return {"rows": len(rows), "by_hook": by_hook, "saved_bytes": saved,
+            "subagents_over_budget": len(agents),
+            "worst_subagents": [{"agent": k, **v} for k, v in worst[:5]]}
+
+
+def render(s: dict, path: Path) -> str:
+    if not s["rows"]:
+        return f"no hook decisions recorded in {path}"
+    out = [f"{s['rows']} decisions in {path}", "", "BY HOOK",
+           f"  {'hook':<24} {'decision':<9} {'count':>6} {'sessions':>9} {'/session':>9}"]
+    for r in s["by_hook"]:
+        out.append(f"  {r['hook']:<24} {r['decision']:<9} {r['count']:>6} "
+                   f"{r['sessions']:>9} {r['per_session']:>9}")
+    if s["saved_bytes"]:
+        out += ["", "SAVED",
+                f"  output spill kept {s['saved_bytes']:,} bytes "
+                f"(~{s['saved_bytes'] // 4:,} tokens) out of context, "
+                f"before counting the turns each would have been re-read"]
+    if s["subagents_over_budget"]:
+        out += ["", "SUBAGENTS",
+                f"  {s['subagents_over_budget']} subagent(s) reached their turn budget"]
+        for a in s["worst_subagents"]:
+            out.append(f"  {a['agent'][:16]:<16} reminders={a['advise']} "
+                       f"denies={a['deny']}  last: {a['last']}")
+    return "\n".join(out)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="hook-cost",
+        description="Summarize the hook decision log: denies, reminders and "
+                    "rewrites per hook, bytes saved, subagents over budget.")
+    ap.add_argument("--since", type=float, default=None, metavar="HOURS",
+                    help="only decisions from the last HOURS hours")
+    ap.add_argument("--session", default="", help="only this session (id prefix)")
+    ap.add_argument("--log", default=None,
+                    help="log path (default $TASKLOOP_HOME/hook_decisions.jsonl)")
+    ap.add_argument("--json", action="store_true", help="print the summary as JSON")
+    args = ap.parse_args(argv)
+    path = Path(args.log) if args.log else log_path()
+    summary = summarize(load(path, args.since, args.session))
+    print(json.dumps(summary, indent=2) if args.json else render(summary, path))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
