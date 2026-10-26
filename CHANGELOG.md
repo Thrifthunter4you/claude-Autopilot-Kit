@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — 2026-10
+
+- **Breaking: the systemd units are renamed** to `taskloop.service` /
+  `taskloop.timer`, matching the package name. The unit contents are
+  unchanged. Installed copies keep running under their pre-0.6 names until
+  you swap them; the steps are in
+  [`systemd/README.md`](systemd/README.md#upgrading-from-05-or-earlier).
+  Update any script that names the old units (`journalctl -u`,
+  `systemctl status`).
+
 ## 0.5.1 — 2026-10
 
 - **Docs:** harness gotcha 11 corrected. It said every event except

@@ -33,8 +33,9 @@ verdict (schema-validated CLI output, not transcript text):
 
 **Contents:** [What's in the box](#whats-in-the-box) ·
 [Why this exists](#why-this-exists) · [Install](#install) ·
-[Try it](#try-it) · [What's new in 0.5](#whats-new-in-05) ·
-[0.4](#whats-new-in-04) · [0.3](#whats-new-in-03) ·
+[Try it](#try-it) · [What's new in 0.6](#whats-new-in-06) ·
+[0.5](#whats-new-in-05) · [0.4](#whats-new-in-04) ·
+[0.3](#whats-new-in-03) ·
 [Meet the new pieces](#meet-the-new-pieces) ·
 [The ideas that matter](#the-ideas-that-matter) ·
 [Safety](#safety) · [License](#license)
@@ -177,6 +178,13 @@ toolbox add --name db-health --description "quick db health check" \
 toolbox find "health"
 toolbox run db-health
 ```
+
+## What's new in 0.6
+
+- **Breaking: the optional systemd units are now `taskloop.service` /
+  `taskloop.timer`**, matching the package name. Nothing else changed in them.
+  Installed copies keep running under the old names; swap them with the
+  steps in [`systemd/README.md`](systemd/README.md#upgrading-from-05-or-earlier).
 
 ## What's new in 0.5
 

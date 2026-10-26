@@ -1,6 +1,6 @@
 [project]
 name = "claude-workflow-kit"
-version = "0.5.1"
+version = "0.6.0"
 description = "Autonomous engineering loop for Claude Code: file-backed task queue, chunked fresh-context workers, self-feeding hooks, tiered agent fleet, script toolbox, token and noise-floor measurement, memory/context MCP servers"
 keywords = ["claude-code", "claude", "autonomous-agents", "ai-agents", "task-queue", "hooks", "mcp", "context-engineering", "token-optimization", "developer-tools", "automation"]
 readme = "README.md"
