@@ -6,6 +6,9 @@ Injects (as additionalContext, a few lines max):
   - queue snapshot: runnable / todo / parked counts
   - the top runnable task (so "pull the next item" needs zero discovery)
   - recent cross-session mailbox announcements (last 6h)
+  - the continuity ledger ``precompact_ledger.py`` wrote: after a
+    compaction of this session, or for a new session started in the same
+    directory within the hour
 
 Fail-open: any error -> exit 0 silent.  Read-only.
 
@@ -24,6 +27,25 @@ sys.path.insert(0, str(KIT))
 HOME = Path(os.environ.get("TASKLOOP_HOME", Path.home() / ".taskloop"))
 MAILBOX = HOME / "mailbox.jsonl"
 MAILBOX_WINDOW = 6 * 3600
+LEDGER_WINDOW = 3600
+
+
+def _continuity(payload: dict):
+    """One line pointing at the latest continuity ledger, or None."""
+    try:
+        latest = json.loads((HOME / "ledgers" / "latest.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(latest, dict) or not Path(str(latest.get("path"))).exists():
+        return None
+    if payload.get("source") == "compact" and latest.get("session") == payload.get("session_id"):
+        return (f"continuity ledger from before this compaction "
+                f"(#{latest.get('compaction', '?')}): {latest['path']}")
+    age = time.time() - float(latest.get("ts", 0))
+    if age <= LEDGER_WINDOW and latest.get("cwd") == payload.get("cwd"):
+        return (f"continuity ledger of a session here {int(age / 60)}m ago "
+                f"(compaction #{latest.get('compaction', '?')}): {latest['path']}")
+    return None
 
 
 def _mailbox_recent(limit: int = 5):
@@ -46,6 +68,13 @@ def _mailbox_recent(limit: int = 5):
 
 def main():
     lines = []
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+        line = _continuity(payload if isinstance(payload, dict) else {})
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
     try:
         from taskloop import config, queue
         if config.ACTIVE_DIR.exists():

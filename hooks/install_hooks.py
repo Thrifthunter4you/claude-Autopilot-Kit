@@ -38,6 +38,7 @@ KIT = Path(__file__).resolve().parents[1]
 # hook names the working tools rather than "*": it reads its count from the
 # subagent's transcript, so it need not see every call, and the answer tool
 # (StructuredOutput) is never matched, so a ceiling can never block it.
+# The context-ceiling reminder shares the list for the same reasons.
 WORK_TOOLS = ("Bash|Read|Grep|Glob|Edit|Write|MultiEdit|NotebookEdit|"
               "WebFetch|WebSearch|mcp__.*")
 KIT_HOOKS = [
@@ -46,8 +47,10 @@ KIT_HOOKS = [
     ("PreToolUse", "Bash", f"python3 {KIT}/hooks/pretool_toolbox_nudge.py"),
     ("PreToolUse", "Read", f"python3 {KIT}/hooks/pretool_spill_read_guard.py"),
     ("PreToolUse", WORK_TOOLS, f"python3 {KIT}/hooks/pretool_subagent_turn_budget.py"),
+    ("PreToolUse", WORK_TOOLS, f"python3 {KIT}/hooks/pretool_context_ceiling.py"),
     ("PostToolUse", "Write|Edit|MultiEdit", f"python3 {KIT}/hooks/posttool_memory_budget.py"),
     ("PostToolUse", "Bash|mcp__.*", f"python3 {KIT}/hooks/posttool_output_spill.py"),
+    ("PreCompact", "*", f"python3 {KIT}/hooks/precompact_ledger.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_queue_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_crystallize_nudge.py"),
     ("Stop", "*", f"python3 {KIT}/hooks/stop_telemetry_nudge.py"),
