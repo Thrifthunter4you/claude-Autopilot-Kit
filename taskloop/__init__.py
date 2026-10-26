@@ -6,4 +6,4 @@ tasks and runs each one in a fresh `claude -p` worker process, chunked so no
 single context window ever holds the whole run.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"

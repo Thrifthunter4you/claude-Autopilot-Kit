@@ -97,3 +97,27 @@ coin flip presented as a result.
 
 - **Kit:** [`noise-floor`](../bin/noise-floor) measures the floor and grades
   the delta; see [token-economy.md](token-economy.md).
+
+## 9. Output past the harness cap is already spilled — by the harness
+
+A Bash result over roughly 30 KB never reaches a PostToolUse hook whole:
+the harness cuts it, saves the full text itself and marks the result with
+`persistedOutputPath`. A hook that "spills" that result writes a TRUNCATED
+copy and labels it the full output.
+
+- **Symptom:** a spill file that ends mid-stream; a model that trusts it.
+- **Kit:** `posttool_output_spill.py` passes any result carrying
+  `persistedOutputPath` through untouched; the harness's own preview
+  already names the complete file.
+
+## 10. A subagent's hook payload carries its PARENT's transcript
+
+PreToolUse fires for subagent tool calls too, with an `agent_id` — but
+`transcript_path` is the parent session's file. The subagent's own
+transcript sits beside it: `<parent minus .jsonl>/subagents/agent-<id>.jsonl`
+(or under `subagents/workflows/*/` for workflow subagents). Count turns
+from the parent file and every subagent looks like the main loop.
+
+- **Kit:** `pretool_subagent_turn_budget.py` resolves the subagent's own
+  file and counts there; with no file it falls back to counting its own
+  calls, an over-count it never uses to deny.

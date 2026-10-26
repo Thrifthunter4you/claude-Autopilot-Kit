@@ -33,7 +33,8 @@ verdict (schema-validated CLI output, not transcript text):
 
 **Contents:** [What's in the box](#whats-in-the-box) ·
 [Why this exists](#why-this-exists) · [Install](#install) ·
-[Try it](#try-it) · [What's new in 0.3](#whats-new-in-03) ·
+[Try it](#try-it) · [What's new in 0.4](#whats-new-in-04) ·
+[0.3](#whats-new-in-03) ·
 [Meet the new pieces](#meet-the-new-pieces) ·
 [The ideas that matter](#the-ideas-that-matter) ·
 [Safety](#safety) · [License](#license)
@@ -53,7 +54,9 @@ verdict (schema-validated CLI output, not transcript text):
   stop-time "make it runnable" queue nudges, repeated-operation
   crystallize nudges (hand-derived it 3×? the loop builds you a script),
   a territory nudge that steers sessions to registered tools instead of
-  hand-derived commands, session-start state briefing. A per-project
+  hand-derived commands, session-start state briefing, automatic
+  spilling of oversized tool output, and a turn-budget reminder for
+  subagents that run long. A per-project
   opt-in: [`hooks/install_hooks.py --project <repo>`](hooks/install_hooks.py)
   writes `<repo>/.claude/settings.local.json`, so nothing fires in
   sessions outside the repositories you enabled.
@@ -66,10 +69,12 @@ verdict (schema-validated CLI output, not transcript text):
   walkthrough: [Meet the new pieces](#meet-the-new-pieces).
 - **Token + measurement tooling** ([`bin/token-audit`](bin/token-audit) +
   [`bin/spill`](bin/spill) + [`bin/noise-floor`](bin/noise-floor) +
+  [`bin/hook-cost`](bin/hook-cost) +
   [`docs/token-economy.md`](docs/token-economy.md)) — rank a session's
   token carriers by carry cost (size × turns remaining), keep bulk
   command output out of the context window, grade a claimed improvement
-  against the rerun noise floor, and the working model of why cache
+  against the rerun noise floor, see what your hooks cost and save, and
+  the working model of why cache
   *writes*, not reads, are the bill. Sample reports:
   [Meet the new pieces](#meet-the-new-pieces).
 - [**`agents/`**](agents/AGENT_DESIGN.md) — a tiered subagent fleet
@@ -159,6 +164,9 @@ token-audit ~/.claude/projects/<project-slug>/<session>.jsonl
 # Run something noisy without pasting 500 lines into the conversation:
 spill run -- pytest -x -q          # preview + spill file + real exit code
 
+# What did the hooks deny, remind and rewrite today — and what did it save?
+hook-cost --since 24
+
 # Did the change beat the rerun noise floor, or just wiggle inside it?
 noise-floor --baseline "./bench.sh" --delta -0.8 --direction lower
 
@@ -168,6 +176,30 @@ toolbox add --name db-health --description "quick db health check" \
 toolbox find "health"
 toolbox run db-health
 ```
+
+## What's new in 0.4
+
+Context economy, enforced by hooks instead of habit
+([CHANGELOG](CHANGELOG.md)):
+
+- **Big tool output spills itself.** A PostToolUse hook moves any
+  successful Bash or MCP result over 8 KB (4 KB inside a subagent) to a
+  spill file and hands the model a head/tail preview that names it. Errors,
+  interrupted runs, images and results the harness already truncated land
+  untouched; `# keep-output` keeps a deliverable whole; common secret
+  shapes are masked before anything hits disk (best effort), and spill
+  files older than a week are pruned.
+- **Subagents see their turn budget.** A subagent's cost grows with the
+  square of its turns, and the "answer within 25 turns" line in its brief
+  scrolls away. A PreToolUse hook counts its tool turns from its own
+  transcript and reminds it at the budget, then every half-budget; an
+  opt-in ceiling stops tool calls (never the answer) at a multiple.
+- **`hook-cost`.** Every kit hook that denies, reminds or rewrites now
+  writes one JSONL row; `hook-cost` turns them into denies per session,
+  bytes kept out of context and the subagents that ran past budget — the
+  numbers you need to keep, tune or drop a guard. Below.
+- **Two more [harness gotchas](docs/harness-gotchas.md)**: oversized output
+  the harness already saved, and where a subagent's transcript really is.
 
 ## What's new in 0.3
 
@@ -192,8 +224,8 @@ A month of running the loop unattended, folded back in
 ## Meet the new pieces
 
 Additions ported from a production setup where Claude Code runs unattended
-for weeks: a script registry, a token profiler, an output bounder, and (0.3)
-a noise-floor gate for measurements. Each works standalone — none requires
+for weeks: a script registry, a token profiler, an output bounder, (0.3)
+a noise-floor gate for measurements, and (0.4) a hook cost report. Each works standalone — none requires
 the task loop.
 
 ### `toolbox` — stop re-deriving what you already built
@@ -335,6 +367,48 @@ verdicts, three exit codes — `DONT-SHIP` exits 3 so a script can gate on
 it. `--delta` grades a number you already have; `--regex` pulls the metric
 out of chatty output. The measure-then-cut loop in
 [docs/token-economy.md](docs/token-economy.md) ends with this step.
+
+### `hook-cost` — is each guard hook worth its turns?
+
+A hook that denies a tool call is never free: the model reads the reason,
+picks another route and calls again, and each of those turns re-sends the
+whole context. A hook that rewrites output saves tokens. Neither shows up
+anywhere unless it is written down, so every kit hook that denies, reminds
+or rewrites appends one row to `~/.taskloop/hook_decisions.jsonl`, and
+`hook-cost` reads it back:
+
+```bash
+hook-cost --since 24
+```
+
+```
+212 decisions in ~/.taskloop/hook_decisions.jsonl
+
+BY HOOK
+  hook                     decision   count  sessions  /session
+  output_spill             rewrite      171        14     12.21
+  subagent_turn_budget     advise        23         9      2.56
+  spill_read_guard         deny          11         6      1.83
+  toolbox_nudge            advise         5         4      1.25
+  subagent_turn_budget     deny           2         2       1.0
+
+SAVED
+  output spill kept 3,914,220 bytes (~978,555 tokens) out of context, before counting the turns each would have been re-read
+
+SUBAGENTS
+  19 subagent(s) reached their turn budget
+  a001c09e2b7d35f1 reminders=2 denies=1  last: wf-verifier 51/25
+  a011c09e2b7d35f1 reminders=2 denies=1  last: wf-verifier 51/25
+  a021c09e2b7d35f1 reminders=2 denies=0  last: wf-verifier 25/25
+```
+
+Read it as costs against savings: each deny is at least one extra turn,
+each spill is a result that would otherwise be re-read on every later turn.
+A guard that fires often on things that were fine should be loosened; one
+that rarely fires is cheap insurance. The turn-budget ceiling ships off —
+switch it on (`TASKLOOP_TURN_CEILING_MULT=2`) once the SUBAGENTS section
+shows where your subagents actually end. `--session <prefix>` narrows to
+one session, `--json` gives the summary for scripts.
 
 ### `tier_policy.yaml` — the fleet's model tiers, drift-linted
 
